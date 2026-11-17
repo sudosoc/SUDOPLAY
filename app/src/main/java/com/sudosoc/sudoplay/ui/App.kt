@@ -26,7 +26,7 @@ private data class Tab(val label: String, val icon: ImageVector)
 private val tabs = listOf(
     Tab("Songs", Icons.Rounded.MusicNote),
     Tab("Albums", Icons.Rounded.Album),
-    Tab("Artists", Icons.Rounded.Person),
+    Tab("Browse", Icons.Rounded.Folder),
     Tab("Playlists", Icons.Rounded.LibraryMusic),
     Tab("Style", Icons.Rounded.Palette),
 )
@@ -47,7 +47,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                         else -> when (tab) {
                             0 -> SongsTab(vm)
                             1 -> AlbumsTab(vm) { detail = it }
-                            2 -> ArtistsTab(vm) { detail = it }
+                            2 -> BrowseTab(vm) { detail = it }
                             3 -> PlaylistsTab(vm) { detail = it }
                             else -> StyleTab(vm)
                         }

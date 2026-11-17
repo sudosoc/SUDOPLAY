@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.media3.common.Player
 import com.sudosoc.sudoplay.PlayerViewModel
 
@@ -23,7 +24,8 @@ import com.sudosoc.sudoplay.PlayerViewModel
 fun NowPlayingScreen(vm: PlayerViewModel, onClose: () -> Unit) {
     val t = LocalSudo.current
     val song = vm.current
-    var showQueue by remember { mutableStateOf(false) }
+    var mode by remember { mutableIntStateOf(0) } // 0 art, 1 lyrics, 2 queue
+    var showEq by remember { mutableStateOf(false) }
 
     SudoBackground(song) {
         Column(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 22.dp, vertical = 8.dp)) {
@@ -31,18 +33,21 @@ fun NowPlayingScreen(vm: PlayerViewModel, onClose: () -> Unit) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onClose) { Icon(Icons.Rounded.KeyboardArrowDown, null, tint = t.text, modifier = Modifier.size(32.dp)) }
                 Text(
-                    if (showQueue) "Queue" else "Now playing", color = t.text.copy(alpha = 0.8f),
+                    when (mode) { 1 -> "Lyrics"; 2 -> "Queue"; else -> "Now playing" }, color = t.text.copy(alpha = 0.8f),
                     modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
-                IconButton(onClick = { showQueue = !showQueue }) {
-                    Icon(Icons.Rounded.QueueMusic, null, tint = if (showQueue) t.primary else t.text)
+                IconButton(onClick = { mode = if (mode == 1) 0 else 1 }) {
+                    Icon(Icons.Rounded.Lyrics, null, tint = if (mode == 1) t.primary else t.text)
+                }
+                IconButton(onClick = { mode = if (mode == 2) 0 else 2 }) {
+                    Icon(Icons.Rounded.QueueMusic, null, tint = if (mode == 2) t.primary else t.text)
                 }
             }
 
             // art or queue
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                if (showQueue) QueueList(vm) else BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                if (mode == 2) QueueList(vm) else if (mode == 1) LyricsView(vm) else BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     val s = minOf(maxWidth, maxHeight)
                     Artwork(song, Modifier.size(s).shadow(24.dp, RoundedCornerShape(28.dp)), 640, 28.dp)
                 }
@@ -104,8 +109,59 @@ fun NowPlayingScreen(vm: PlayerViewModel, onClose: () -> Unit) {
             // extras: speed + sleep
             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                 SpeedChip(vm)
+                EqChip(vm) { showEq = true }
                 SleepChip(vm)
             }
+        }
+    }
+    if (showEq) EqSheet(vm) { showEq = false }
+}
+
+@Composable
+private fun EqChip(vm: PlayerViewModel, onClick: () -> Unit) {
+    val t = LocalSudo.current
+    Row(
+        Modifier.sudoPanel(RoundedCornerShape(50)).clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.Equalizer, null, tint = if (vm.eqEnabled) t.primary else t.text, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text("EQ", color = if (vm.eqEnabled) t.primary else t.text)
+    }
+}
+
+@Composable
+private fun LyricsView(vm: PlayerViewModel) {
+    val t = LocalSudo.current
+    val l = vm.lyrics
+    val shape = RoundedCornerShape(24.dp)
+    if (l == null) {
+        Box(Modifier.fillMaxSize().sudoPanel(shape), contentAlignment = Alignment.Center) {
+            Text(
+                "No lyrics found\nEmbedded in the MP3, or a .lrc file next to the song",
+                color = t.text.copy(alpha = 0.65f), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(24.dp),
+            )
+        }
+        return
+    }
+    val idx = if (l.synced) l.lines.indexOfLast { it.timeMs <= vm.position }.coerceAtLeast(0) else -1
+    val state = rememberLazyListState()
+    LaunchedEffect(idx, l) { if (idx >= 0) state.animateScrollToItem((idx - 2).coerceAtLeast(0)) }
+    LazyColumn(
+        Modifier.fillMaxSize().sudoPanel(shape), state = state,
+        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        itemsIndexed(l.lines) { i, line ->
+            val cur = i == idx
+            Text(
+                line.text.ifBlank { "♪" },
+                color = if (cur || !l.synced) (if (l.synced) t.primary else t.text) else t.text.copy(alpha = 0.55f),
+                fontSize = if (cur) 22.sp else 18.sp,
+                fontWeight = if (cur) FontWeight.Bold else FontWeight.Medium,
+                modifier = Modifier.clickable(enabled = l.synced) { vm.seekTo(line.timeMs) },
+            )
         }
     }
 }

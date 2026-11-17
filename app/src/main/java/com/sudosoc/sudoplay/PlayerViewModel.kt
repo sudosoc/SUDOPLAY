@@ -20,8 +20,12 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
+import com.sudosoc.sudoplay.data.EqPresets
+import com.sudosoc.sudoplay.data.Lyrics
+import com.sudosoc.sudoplay.data.LyricsLoader
 import com.sudosoc.sudoplay.data.MusicRepository
 import com.sudosoc.sudoplay.data.PlaylistStore
+import com.sudosoc.sudoplay.data.Smart
 import com.sudosoc.sudoplay.data.Song
 import com.sudosoc.sudoplay.playback.PlaybackService
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +61,31 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     var queueIndex by mutableIntStateOf(0); private set
     var sleepEndsAt by mutableLongStateOf(0L); private set
 
+    // ---- lyrics ----
+    var lyrics by mutableStateOf<Lyrics?>(null); private set
+    private var lyricsFor = -1L
+
+    // ---- play stats (drive the smart lists) ----
+    var plays by mutableStateOf(parsePlays(prefs.getString("plays", "") ?: "")); private set
+    var recent by mutableStateOf(
+        (prefs.getString("recent", "") ?: "").split(",").mapNotNull { it.toLongOrNull() }
+    ); private set
+    private var lastCounted = -1L
+
+    // ---- equalizer ----
+    var eqBands by mutableIntStateOf(0); private set
+    var eqMin by mutableIntStateOf(-1500); private set
+    var eqMax by mutableIntStateOf(1500); private set
+    var eqFreqs by mutableStateOf<List<Int>>(emptyList()); private set
+    var eqEnabled by mutableStateOf(prefs.getBoolean("eq_on", false)); private set
+    var eqLevels by mutableStateOf(
+        (prefs.getString("eq_levels", "") ?: "").split(",").mapNotNull { it.toIntOrNull() }
+    ); private set
+    var eqPreset by mutableStateOf(prefs.getString("eq_preset", "") ?: ""); private set
+    var bass by mutableIntStateOf(prefs.getInt("eq_bass", 0)); private set
+    var virt by mutableIntStateOf(prefs.getInt("eq_virt", 0)); private set
+    var loud by mutableIntStateOf(prefs.getInt("eq_loud", 0)); private set
+
     // ---- UI helpers ----
     var playlistTarget by mutableStateOf<Song?>(null)
 
@@ -74,6 +103,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 controller = it
                 it.addListener(listener)
                 sync()
+                loadEqInfo()
             }
         }, MoreExecutors.directExecutor())
 
@@ -108,7 +138,79 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         current = byId[c.currentMediaItem?.mediaId?.toLongOrNull()]
         duration = c.duration.takeIf { it > 0 } ?: current?.durationMs ?: 0L
         position = c.currentPosition
+
+        val cur = current
+        if (cur != null && cur.id != lyricsFor) {
+            lyricsFor = cur.id
+            lyrics = null
+            viewModelScope.launch {
+                val l = withContext(Dispatchers.IO) { runCatching { LyricsLoader.load(ctx, cur) }.getOrNull() }
+                if (lyricsFor == cur.id) lyrics = l
+            }
+        }
+        if (cur != null && isPlaying && cur.id != lastCounted) {
+            lastCounted = cur.id
+            plays = plays + (cur.id to ((plays[cur.id] ?: 0) + 1))
+            recent = (listOf(cur.id) + recent.filter { it != cur.id }).take(50)
+            prefs.edit()
+                .putString("plays", plays.entries.joinToString(",") { "${it.key}:${it.value}" })
+                .putString("recent", recent.joinToString(","))
+                .apply()
+        }
     }
+
+    fun smart(kind: Smart): List<Song> = when (kind) {
+        Smart.Recent -> recent.mapNotNull { byId[it] }
+        Smart.Most -> songs.filter { (plays[it.id] ?: 0) > 0 }.sortedByDescending { plays[it.id] ?: 0 }.take(100)
+        Smart.Added -> songs.sortedByDescending { it.dateAdded }.take(100)
+        Smart.Unplayed -> songs.filter { (plays[it.id] ?: 0) == 0 }
+    }
+
+    // ---- equalizer ----
+    private fun loadEqInfo() {
+        val c = controller ?: return
+        val f = c.sendCustomCommand(SessionCommand(PlaybackService.CMD_EQ_INFO, Bundle.EMPTY), Bundle.EMPTY)
+        f.addListener({
+            runCatching { f.get().extras }.getOrNull()?.let { b ->
+                eqBands = b.getInt(PlaybackService.KEY_BANDS)
+                if (eqBands > 0) {
+                    eqMin = b.getInt(PlaybackService.KEY_MINLVL)
+                    eqMax = b.getInt(PlaybackService.KEY_MAXLVL)
+                    eqFreqs = b.getIntArray(PlaybackService.KEY_FREQS)?.toList() ?: emptyList()
+                    if (eqLevels.size != eqBands) eqLevels = List(eqBands) { 0 }
+                }
+                applyEq()
+            }
+        }, MoreExecutors.directExecutor())
+    }
+
+    private fun applyEq() {
+        prefs.edit()
+            .putBoolean("eq_on", eqEnabled).putString("eq_levels", eqLevels.joinToString(","))
+            .putString("eq_preset", eqPreset).putInt("eq_bass", bass).putInt("eq_virt", virt).putInt("eq_loud", loud)
+            .apply()
+        controller?.sendCustomCommand(
+            SessionCommand(PlaybackService.CMD_EQ_SET, Bundle.EMPTY),
+            bundleOf(
+                PlaybackService.KEY_ON to eqEnabled, PlaybackService.KEY_LEVELS to eqLevels.toIntArray(),
+                PlaybackService.KEY_BASS to bass, PlaybackService.KEY_VIRT to virt, PlaybackService.KEY_LOUD to loud,
+            ),
+        )
+    }
+
+    fun toggleEq(on: Boolean) { eqEnabled = on; applyEq() }
+    fun setEqLevel(i: Int, v: Int) {
+        eqLevels = eqLevels.toMutableList().also { if (i in it.indices) it[i] = v }
+        eqPreset = ""; applyEq()
+    }
+    fun applyPreset(name: String) {
+        if (eqBands == 0) return
+        eqLevels = EqPresets.levels(name, eqBands, eqMax)
+        eqPreset = name; eqEnabled = true; applyEq()
+    }
+    fun changeBass(v: Int) { bass = v; applyEq() }
+    fun changeVirt(v: Int) { virt = v; applyEq() }
+    fun changeLoud(v: Int) { loud = v; applyEq() }
 
     private fun toItem(s: Song): MediaItem = MediaItem.Builder()
         .setMediaId(s.id.toString())
@@ -188,3 +290,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         super.onCleared()
     }
 }
+
+private fun parsePlays(raw: String): Map<Long, Int> =
+    raw.split(",").mapNotNull {
+        val p = it.split(":")
+        val id = p.getOrNull(0)?.toLongOrNull()
+        val n = p.getOrNull(1)?.toIntOrNull()
+        if (id != null && n != null) id to n else null
+    }.toMap()

@@ -27,12 +27,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sudosoc.sudoplay.PlayerViewModel
 import com.sudosoc.sudoplay.data.FAV_ID
+import com.sudosoc.sudoplay.data.Smart
 import com.sudosoc.sudoplay.data.Song
 
 sealed interface Detail {
     data class Album(val name: String) : Detail
     data class Artist(val name: String) : Detail
     data class Pl(val id: String) : Detail
+    data class Folder(val path: String) : Detail
+    data class SmartList(val kind: Smart) : Detail
 }
 
 @Composable
@@ -145,11 +148,44 @@ fun AlbumsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
 
 // ---------------- Artists ----------------
 @Composable
-fun ArtistsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
+fun BrowseTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
+    var mode by rememberSaveable { mutableIntStateOf(0) }
+    Column(Modifier.fillMaxSize()) {
+        ScreenTitle("Browse")
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PillButton("Artists", Icons.Rounded.Person, filled = mode == 0) { mode = 0 }
+            PillButton("Folders", Icons.Rounded.Folder, filled = mode == 1) { mode = 1 }
+        }
+        if (mode == 0) ArtistList(vm, onOpen) else FolderList(vm, onOpen)
+    }
+}
+
+@Composable
+private fun FolderList(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
+    val t = LocalSudo.current
+    val folders = remember(vm.songs) { vm.songs.groupBy { it.folder }.toList().sortedBy { it.first.lowercase() } }
+    if (folders.isEmpty()) EmptyState("No folders yet")
+    LazyColumn {
+        items(folders, key = { it.first }) { (path, songs) ->
+            Row(Modifier.fillMaxWidth().clickable { onOpen(Detail.Folder(path)) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(50.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(t.primary.copy(alpha = 0.8f), t.secondary.copy(alpha = 0.8f)))), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.Folder, null, tint = Color.Black.copy(alpha = 0.75f))
+                }
+                Spacer(Modifier.width(14.dp))
+                Column {
+                    Text(path.substringAfterLast('/').ifEmpty { path }, color = t.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${songs.size} songs • $path", color = t.text.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArtistList(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
     val t = LocalSudo.current
     val artists = remember(vm.songs) { vm.songs.groupBy { it.artist }.toList().sortedBy { it.first.lowercase() } }
     Column(Modifier.fillMaxSize()) {
-        ScreenTitle("Artists")
         if (artists.isEmpty()) EmptyState("No artists yet")
         LazyColumn {
             items(artists, key = { it.first }) { (name, songs) ->
@@ -175,6 +211,24 @@ fun PlaylistsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
         ScreenTitle("Playlists")
         Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { PillButton("New playlist", Icons.Rounded.Add, filled = true) { creating = true } }
         LazyColumn(Modifier.padding(top = 6.dp)) {
+            items(Smart.entries.toList(), key = { "smart_" + it.name }) { k ->
+                val icon = when (k) {
+                    Smart.Recent -> Icons.Rounded.History
+                    Smart.Most -> Icons.Rounded.Whatshot
+                    Smart.Added -> Icons.Rounded.NewReleases
+                    Smart.Unplayed -> Icons.Rounded.Explore
+                }
+                Row(Modifier.fillMaxWidth().clickable { onOpen(Detail.SmartList(k)) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(54.dp).clip(RoundedCornerShape(14.dp)).sudoPanel(RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                        Icon(icon, null, tint = t.primary)
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column {
+                        Text(k.title, color = t.text, fontWeight = FontWeight.SemiBold)
+                        Text("Smart list", color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
             items(vm.store.items.toList(), key = { it.id }) { p ->
                 var menu by remember { mutableStateOf(false) }
                 Row(Modifier.fillMaxWidth().clickable { onOpen(Detail.Pl(p.id)) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -241,6 +295,8 @@ fun DetailScreen(vm: PlayerViewModel, detail: Detail, onBack: () -> Unit) {
     val (title, list) = when (detail) {
         is Detail.Album -> detail.name to vm.songs.filter { it.album == detail.name }.sortedBy { it.track }
         is Detail.Artist -> detail.name to vm.songs.filter { it.artist == detail.name }.sortedBy { it.title.lowercase() }
+        is Detail.Folder -> detail.path.substringAfterLast('/').ifEmpty { detail.path } to vm.songs.filter { it.folder == detail.path }.sortedBy { it.title.lowercase() }
+        is Detail.SmartList -> detail.kind.title to vm.smart(detail.kind)
         is Detail.Pl -> {
             val p = vm.store.get(detail.id)
             (p?.name ?: "Playlist") to (p?.songIds?.mapNotNull { id -> vm.songs.firstOrNull { it.id == id } } ?: emptyList())
@@ -274,6 +330,19 @@ fun StyleTab(vm: PlayerViewModel) {
         ScreenTitle("Style")
         Text("Pick a look. Glass, solid and artwork-blur themes change how every surface is drawn.",
             color = t.text.copy(alpha = 0.65f), modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp), style = MaterialTheme.typography.bodySmall)
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        if (android.os.Build.VERSION.SDK_INT >= 30 && !android.os.Environment.isExternalStorageManager()) {
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                PillButton("Enable .lrc lyrics files", Icons.Rounded.Lyrics) {
+                    ctx.startActivity(
+                        android.content.Intent(
+                            android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                            android.net.Uri.parse("package:${ctx.packageName}"),
+                        )
+                    )
+                }
+            }
+        }
         LazyVerticalGrid(GridCells.Fixed(2), contentPadding = PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(Themes.all, key = { it.id }) { th -> ThemeCard(th, selected = vm.themeId == th.id) { vm.setTheme(th.id) } }
         }

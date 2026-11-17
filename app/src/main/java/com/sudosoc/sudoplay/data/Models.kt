@@ -12,8 +12,18 @@ data class Song(
     val uri: Uri,
     val dateAdded: Long,
     val track: Int,
+    val folder: String = "",
+    val path: String = "",
 )
 
 data class Playlist(val id: String, val name: String, val songIds: List<Long>)
 
 const val FAV_ID = "fav"
+
+/** Auto-generated lists driven by play statistics / metadata. */
+enum class Smart(val title: String) {
+    Recent("Recently played"),
+    Most("Most played"),
+    Added("Recently added"),
+    Unplayed("Never played"),
+}
