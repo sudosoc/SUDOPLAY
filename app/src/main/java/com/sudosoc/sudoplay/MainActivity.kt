@@ -23,9 +23,21 @@ class MainActivity : ComponentActivity() {
 
     private fun hasAudio() = ContextCompat.checkSelfPermission(this, audioPerm) == PackageManager.PERMISSION_GRANTED
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(i: android.content.Intent?) {
+        if (i?.action == ACTION_OPEN_PLAYER) vm.requestPlayer()
+    }
+
+    companion object { const val ACTION_OPEN_PLAYER = "com.sudosoc.sudoplay.OPEN_PLAYER" }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        handleIntent(intent)
         setContent {
             var granted by remember { mutableStateOf(hasAudio()) }
             val perms = remember {

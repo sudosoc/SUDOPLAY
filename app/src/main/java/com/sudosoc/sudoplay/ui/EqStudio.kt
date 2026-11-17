@@ -91,10 +91,20 @@ fun EqStudio(vm: PlayerViewModel, onClose: () -> Unit) {
                     FxSlider("Loudness", "${fx.loud / 10}%", fx.loud.toFloat(), 0f..1000f, { v -> vm.fxEdit(false) { it.copy(loud = v.toInt(), preset = "") } }) { vm.fxSave() }
                 }
 
+                FxCard("Pitch", I.Tune, null, {}) {
+                    val semi = vm.settings.pitchSemi.value
+                    FxSlider("Key shift", (if (semi > 0) "+" else "") + "$semi semitones", semi.toFloat(), -6f..6f, { v -> vm.changePitch(v.toInt()) }) {}
+                    Pill("Reset pitch", semi == 0) { vm.changePitch(0) }
+                }
+
                 FxCard("Surround & space", I.Explore, fx.virtOn, { on -> vm.fxEdit { it.copy(virtOn = on, preset = "") } }) {
                     FxSlider("Virtual surround", "${fx.virt / 10}%", fx.virt.toFloat(), 0f..1000f, { v -> vm.fxEdit(false) { it.copy(virt = v.toInt(), virtOn = true, preset = "") } }) { vm.fxSave() }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("Auto", "Headphones", "Speakers").forEachIndexed { i, n -> Pill(n, fx.virtMode == i) { vm.fxEdit { it.copy(virtMode = i, virtOn = true, preset = "") } } }
+                    }
+                    Pill("Mono", fx.widthOn && fx.width == 0) {
+                        if (fx.widthOn && fx.width == 0) vm.fxEdit { it.copy(widthOn = false, width = 100, preset = "") }
+                        else vm.fxEdit { it.copy(widthOn = true, width = 0, preset = "") }
                     }
                     SubToggle("Stereo width", fx.widthOn) { on -> vm.fxEdit { it.copy(widthOn = on, preset = "") } }
                     FxSlider("Width", "${fx.width}%", fx.width.toFloat(), 0f..200f, { v -> vm.fxEdit(false) { it.copy(width = v.toInt(), widthOn = true, preset = "") } }) { vm.fxSave() }

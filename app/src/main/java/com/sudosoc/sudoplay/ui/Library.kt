@@ -217,6 +217,7 @@ fun PlaylistsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
                     Smart.Most -> I.Whatshot
                     Smart.Added -> I.NewReleases
                     Smart.Unplayed -> I.Explore
+                    Smart.Mix -> I.AutoAwesome
                 }
                 Row(Modifier.fillMaxWidth().clickable { onOpen(Detail.SmartList(k)) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(54.dp).clip(RoundedCornerShape(14.dp)).sudoPanel(RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {

@@ -5,6 +5,10 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -44,7 +48,8 @@ fun SettingsTab(vm: PlayerViewModel) {
 
     BackHandler(enabled = page != "home") {
         page = when (page) {
-            "app_themes", "player_themes", "seek_styles", "icon_styles", "player_buttons" -> "appearance"
+            "app_themes", "player_themes", "seek_styles", "icon_styles", "player_buttons", "nav_bar" -> "appearance"
+            "stats" -> "features"
             "hidden_folders" -> "extras"
             else -> "home"
         }
@@ -57,10 +62,12 @@ fun SettingsTab(vm: PlayerViewModel) {
         "seek_styles" -> SeekStylesPage(vm) { page = "appearance" }
         "icon_styles" -> IconStylesPage(vm) { page = "appearance" }
         "player_buttons" -> PlayerButtonsPage(vm) { page = "appearance" }
+        "nav_bar" -> NavBarPage(vm) { page = "appearance" }
+        "stats" -> StatsPage(vm) { page = "features" }
         "extras" -> ExtrasPage(vm, onOpen = { page = it }) { page = "home" }
         "hidden_folders" -> HiddenFoldersPage(vm) { page = "extras" }
         "props" -> PropertiesPage(vm) { page = "home" }
-        "features" -> FeaturesPage(vm) { page = "home" }
+        "features" -> FeaturesPage(vm, onOpen = { page = it }) { page = "home" }
         else -> HomePage(vm) { page = it }
     }
 }
@@ -145,7 +152,7 @@ private fun HomePage(vm: PlayerViewModel, onOpen: (String) -> Unit) {
         BigSection(I.Extension, "Extras", "الإضافات", "Library filters, hidden folders, .lrc lyrics, covers") { onOpen("extras") }
         BigSection(I.Tune, "Properties", "الخصائص", "Gestures, seek sensitivity, vibration") { onOpen("props") }
         BigSection(I.AutoAwesome, "Features", "المميزات", "Screen, lyrics, play history") { onOpen("features") }
-        Text("SUDOPLAY 0.4.0 • by SUDOSOC", color = t.text.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall,
+        Text("SUDOPLAY 0.5.0 • by SUDOSOC", color = t.text.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(20.dp))
     }
 }
@@ -183,6 +190,8 @@ private fun AppearancePage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack
         NavRow(I.Tune, "Seek bar style", "${SeekStyles.firstOrNull { it.first == s.seekStyle.value }?.second ?: "Classic"} • ${SeekStyles.size} shapes") { onOpen("seek_styles") }
         NavRow(I.Palette, "Icon style", "${runCatching { IconStyle.valueOf(s.iconStyle.value) }.getOrDefault(IconStyle.Rounded).label} • ${IconStyle.entries.size} families") { onOpen("icon_styles") }
         NavRow(I.Extension, "Player buttons", "Choose which buttons are shown") { onOpen("player_buttons") }
+        SectionLabel("App")
+        NavRow(I.Apps, "Navigation bar", "Pick the tabs and move it: ${s.navPos.value}") { onOpen("nav_bar") }
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -349,6 +358,8 @@ private fun PlayerButtonsPage(vm: PlayerViewModel, onBack: () -> Unit) {
         SwitchRow("Previous", null, s.btnPrev.value) { s.btnPrev.set(it) }
         SwitchRow("Next", null, s.btnNext.value) { s.btnNext.set(it) }
         SwitchRow("Repeat", null, s.btnRepeat.value) { s.btnRepeat.set(it) }
+        SectionLabel("Under the seek bar")
+        SwitchRow("A–B loop", "Mark a part of the song and repeat just that", s.btnAb.value) { s.btnAb.set(it) }
         SectionLabel("Bottom chips")
         SwitchRow("Speed", "Tap on/off, hold and slide to choose", s.btnSpeed.value) { s.btnSpeed.set(it) }
         SwitchRow("EQ", "Tap on/off, hold to open the studio", s.btnEq.value) { s.btnEq.set(it) }
@@ -441,6 +452,9 @@ private fun PropertiesPage(vm: PlayerViewModel, onBack: () -> Unit) {
             "Seek sensitivity", "${s.scrubSeconds.value}s per full swipe", s.scrubSeconds.value.toFloat(), 30f..300f, steps = 8,
         ) { s.scrubSeconds.set((it / 15).toInt() * 15) }
 
+        SectionLabel("Feedback")
+        SwitchRow("Gesture icon", "The badge shown on double-tap and swipes. Off keeps only the rubber stretch", s.gestureIcon.value) { s.gestureIcon.set(it) }
+
         SectionLabel("Vibration")
         RowCard {
             Column(Modifier.weight(1f)) {
@@ -472,22 +486,120 @@ private fun PropertiesPage(vm: PlayerViewModel, onBack: () -> Unit) {
     }
 }
 
+// ---------------------------------------------------------------- navigation bar
+@Composable
+private fun NavBarPage(vm: PlayerViewModel, onBack: () -> Unit) {
+    val t = LocalSudo.current
+    val s = vm.settings
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        SubHeader("Navigation bar", onBack)
+        SectionLabel("Position")
+        RowCard {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("bottom" to "Bottom", "top" to "Top", "left" to "Left", "right" to "Right").forEach { (id, label) ->
+                    val on = s.navPos.value == id
+                    Text(
+                        label, color = if (on) t.onAccent else t.text, fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier.clip(RoundedCornerShape(50))
+                            .then(if (on) Modifier.background(Brush.horizontalGradient(listOf(t.primary, t.secondary))) else Modifier.border(1.dp, t.text.copy(alpha = 0.25f), RoundedCornerShape(50)))
+                            .clickable { s.navPos.set(id); vm.haptics.click() }.padding(horizontal = 16.dp, vertical = 9.dp),
+                    )
+                }
+            }
+        }
+        SectionLabel("Tabs")
+        SwitchRow("Songs", null, s.navSongs.value) { s.navSongs.set(it) }
+        SwitchRow("Albums", null, s.navAlbums.value) { s.navAlbums.set(it) }
+        SwitchRow("Browse", "Artists and folders", s.navBrowse.value) { s.navBrowse.set(it) }
+        SwitchRow("Playlists", null, s.navPlaylists.value) { s.navPlaylists.set(it) }
+        RowCard { TitleSub("Settings", "Always shown so you can never lock yourself out", Modifier.weight(1f)) }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+// ---------------------------------------------------------------- stats
+@Composable
+private fun StatsPage(vm: PlayerViewModel, onBack: () -> Unit) {
+    val t = LocalSudo.current
+    val byId = remember(vm.rawSongs) { vm.rawSongs.associateBy { it.id } }
+    val played = vm.plays.filter { byId.containsKey(it.key) }
+    val totalPlays = played.values.sum()
+    val totalMs = played.entries.sumOf { (byId[it.key]?.durationMs ?: 0L) * it.value }
+    val topSongs = played.entries.sortedByDescending { it.value }.take(5).mapNotNull { e -> byId[e.key]?.let { it to e.value } }
+    val topArtists = played.entries.groupBy { byId[it.key]?.artist ?: "" }.mapValues { it.value.sumOf { e -> e.value } }.entries
+        .filter { it.key.isNotBlank() }.sortedByDescending { it.value }.take(5)
+    val topAlbums = played.entries.groupBy { byId[it.key]?.album ?: "" }.mapValues { it.value.sumOf { e -> e.value } }.entries
+        .filter { it.key.isNotBlank() }.sortedByDescending { it.value }.take(3)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        SubHeader("Your stats", onBack)
+        RowCard {
+            Column(Modifier.weight(1f)) {
+                Text("${totalMs / 3_600_000} h ${totalMs / 60_000 % 60} min", color = t.primary, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text("listened • $totalPlays plays • ${played.size} different tracks", color = t.text.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        if (topSongs.isEmpty()) RowCard { TitleSub("Nothing yet", "Play some music and come back", Modifier.weight(1f)) }
+        SectionLabel("Top tracks")
+        topSongs.forEachIndexed { i, (song, n) -> RowCard { TitleSub("${i + 1}. ${song.title}", "${song.artist} • $n plays", Modifier.weight(1f)) } }
+        SectionLabel("Top artists")
+        topArtists.forEachIndexed { i, e -> RowCard { TitleSub("${i + 1}. ${e.key}", "${e.value} plays", Modifier.weight(1f)) } }
+        SectionLabel("Top albums")
+        topAlbums.forEachIndexed { i, e -> RowCard { TitleSub("${i + 1}. ${e.key}", "${e.value} plays", Modifier.weight(1f)) } }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
 // ---------------------------------------------------------------- features
 @Composable
-private fun FeaturesPage(vm: PlayerViewModel, onBack: () -> Unit) {
+private fun FeaturesPage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack: () -> Unit) {
     val s = vm.settings
     val t = LocalSudo.current
+    val ctx = LocalContext.current
+    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) runCatching {
+            ctx.contentResolver.openOutputStream(uri)?.use { it.write(vm.backupJson().toByteArray()) }
+            Toast.makeText(ctx, "Backup saved", Toast.LENGTH_SHORT).show()
+        }.onFailure { Toast.makeText(ctx, "Could not save the backup", Toast.LENGTH_SHORT).show() }
+    }
+    val opener = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val text = runCatching { ctx.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } }.getOrNull()
+            if (text != null && vm.restoreJson(text)) {
+                Toast.makeText(ctx, "Restored — restarting…", Toast.LENGTH_SHORT).show()
+                ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.component?.let { c ->
+                    ctx.startActivity(Intent.makeRestartActivityTask(c))
+                }
+                Runtime.getRuntime().exit(0)
+            } else Toast.makeText(ctx, "That is not a SUDOPLAY backup", Toast.LENGTH_SHORT).show()
+        }
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         SubHeader("Features", onBack)
+        SectionLabel("Playback")
+        SwitchRow("Skip silence", "Jumps over silent gaps inside tracks", s.skipSilence.value) { s.skipSilence.set(it); vm.applyMisc() }
+        SwitchRow("Fade out when the sleep timer ends", "Volume eases down over the last 15 seconds", s.sleepFade.value) { s.sleepFade.set(it) }
+        SwitchRow("Shake to skip", "Shake the phone to jump to the next track (only while playing)", s.shake.value) { s.shake.set(it) }
         SectionLabel("Player")
         SwitchRow("Keep screen on", "While the player page is open", s.keepScreenOn.value) { s.keepScreenOn.set(it) }
         SwitchRow("Open on lyrics", "Show lyrics first instead of the cover", s.lyricsDefault.value) { s.lyricsDefault.set(it) }
         SectionLabel("Library")
-        SwitchRow("Count plays", "Feeds Recently played / Most played / Never played", s.countPlays.value) { s.countPlays.set(it) }
+        NavRow(I.Whatshot, "Your stats", "Listening time, top tracks, artists and albums") { onOpen("stats") }
+        SwitchRow("Count plays", "Feeds Recently played / Most played / Never played / Mix", s.countPlays.value) { s.countPlays.set(it) }
         RowCard(onClick = { vm.clearHistory() }) {
             Icon(I.DeleteSweep, null, tint = t.primary)
             Spacer(Modifier.width(12.dp))
             TitleSub("Clear play history", "Resets play counts and the recent list", Modifier.weight(1f))
+        }
+        SectionLabel("Backup")
+        RowCard(onClick = { saver.launch("sudoplay-backup.json") }) {
+            Icon(I.Collections, null, tint = t.primary)
+            Spacer(Modifier.width(12.dp))
+            TitleSub("Back up", "Settings, scenes, play counts and playlists in one file", Modifier.weight(1f))
+        }
+        RowCard(onClick = { opener.launch(arrayOf("application/json", "application/octet-stream", "*/*")) }) {
+            Icon(I.RestartAlt, null, tint = t.primary)
+            Spacer(Modifier.width(12.dp))
+            TitleSub("Restore", "Pick a backup file; the app restarts", Modifier.weight(1f))
         }
         Spacer(Modifier.height(24.dp))
     }

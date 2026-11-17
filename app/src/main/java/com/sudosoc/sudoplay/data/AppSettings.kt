@@ -54,6 +54,23 @@ class AppSettings(prefs: SharedPreferences) {
     val btnEq = BoolSetting(prefs, "b_eq", true)
     val btnSleep = BoolSetting(prefs, "b_sleep", true)
 
+    val gestureIcon = BoolSetting(prefs, "g_icon", true)
+    val btnAb = BoolSetting(prefs, "b_ab", true)
+
+    // Navigation bar
+    val navSongs = BoolSetting(prefs, "n_songs", true)
+    val navAlbums = BoolSetting(prefs, "n_albums", true)
+    val navBrowse = BoolSetting(prefs, "n_browse", true)
+    val navPlaylists = BoolSetting(prefs, "n_playlists", true)
+    /** bottom | top | left | right */
+    val navPos = StringSetting(prefs, "n_pos", "bottom")
+
+    // Playback extras
+    val skipSilence = BoolSetting(prefs, "p_skip_silence", false)
+    val sleepFade = BoolSetting(prefs, "p_sleep_fade", true)
+    val shake = BoolSetting(prefs, "p_shake", false)
+    val pitchSemi = IntSetting(prefs, "p_pitch", 0)
+
     // Library (Extras)
     val minDurationSec = IntSetting(prefs, "lib_min_dur", 20)
     val hiddenFolders = StringSetting(prefs, "lib_hidden", "")

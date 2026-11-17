@@ -26,4 +26,5 @@ enum class Smart(val title: String) {
     Most("Most played"),
     Added("Recently added"),
     Unplayed("Never played"),
+    Mix("Mix for you"),
 }

@@ -4,6 +4,10 @@ import android.app.Application
 import android.content.ComponentName
 import android.content.Context
 import android.database.ContentObserver
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -19,6 +23,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
@@ -44,6 +49,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.pow
+import kotlin.math.sqrt
 import kotlin.random.Random
 
 class PlayerViewModel(app: Application) : AndroidViewModel(app) {
@@ -65,6 +72,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private var byId: Map<Long, Song> = emptyMap()
     private var refreshJob: Job? = null
     private var restored = false
+    private var abSong = -1L
+    private var mixSeed = System.currentTimeMillis()
+    fun newMix() { mixSeed = System.nanoTime(); mixTick++ }
+    var mixTick by mutableIntStateOf(0); private set
 
     // ---- playback state ----
     var current by mutableStateOf<Song?>(null); private set
@@ -99,6 +110,43 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     var eqMax by mutableIntStateOf(1500); private set
     var eqFreqs by mutableStateOf<List<Int>>(emptyList()); private set
 
+    // ---- open-player request (notification tap) ----
+    var wantPlayer by mutableStateOf(false); private set
+    fun requestPlayer() { wantPlayer = true; viewModelScope.launch { delay(4000); wantPlayer = false } }
+    fun playerOpened() { wantPlayer = false }
+
+    // ---- A-B loop ----
+    var abA by mutableStateOf<Long?>(null); private set
+    var abB by mutableStateOf<Long?>(null); private set
+    fun abCycle() {
+        when {
+            abA == null -> abA = position
+            abB == null -> if (position > (abA ?: 0L) + 500) abB = position else abA = null
+            else -> { abA = null; abB = null }
+        }
+        haptics.click()
+    }
+
+    // ---- shake to skip ----
+    private val sensors = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    private var shakeOn = false
+    private var lastShake = 0L
+    private val shakeListener = object : SensorEventListener {
+        override fun onSensorChanged(e: SensorEvent) {
+            val g = sqrt(e.values[0] * e.values[0] + e.values[1] * e.values[1] + e.values[2] * e.values[2]) / 9.81f
+            val now = System.currentTimeMillis()
+            if (g > 2.7f && now - lastShake > 1000) { lastShake = now; haptics.heavy(); next() }
+        }
+        override fun onAccuracyChanged(s: Sensor?, a: Int) {}
+    }
+    private fun updateShake() {
+        val want = settings.shake.value && isPlaying
+        if (want == shakeOn) return
+        shakeOn = want
+        if (want) sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sensors.registerListener(shakeListener, it, SensorManager.SENSOR_DELAY_UI) }
+        else sensors.unregisterListener(shakeListener)
+    }
+
     // ---- UI helpers ----
     var playlistTarget by mutableStateOf<Song?>(null)
 
@@ -126,14 +174,18 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 sync()
                 loadEqInfo()
                 tryRestore()
+                applyMisc()
+                changePitch(settings.pitchSemi.value)
             }
         }, MoreExecutors.directExecutor())
 
         viewModelScope.launch {
             var tick = 0
             while (isActive) {
-                delay(400)
+                delay(if (abB != null) 150 else 400)
                 controller?.let { if (it.isPlaying) position = it.currentPosition }
+                abB?.let { b -> abA?.let { a -> if (position >= b) seekTo(a) } }
+                updateShake()
                 if (sleepEndsAt != 0L && System.currentTimeMillis() > sleepEndsAt) sleepEndsAt = 0L
                 if (++tick % 10 == 0) saveQueue()
             }
@@ -210,6 +262,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
         val cur = current
         if (sleepEndOfSong && cur?.id != sleepSongId) sleepEndOfSong = false
+        if (cur?.id != abSong) { abSong = cur?.id ?: -1L; abA = null; abB = null }
         if (cur != null && cur.id != lyricsFor) {
             lyricsFor = cur.id
             lyrics = null
@@ -234,7 +287,16 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         Smart.Most -> songs.filter { (plays[it.id] ?: 0) > 0 }.sortedByDescending { plays[it.id] ?: 0 }.take(100)
         Smart.Added -> songs.sortedByDescending { it.dateAdded }.take(100)
         Smart.Unplayed -> songs.filter { (plays[it.id] ?: 0) == 0 }
+        Smart.Mix -> {
+            val rnd = Random(mixSeed)
+            val fav = songs.filter { (plays[it.id] ?: 0) > 0 }.sortedByDescending { plays[it.id] ?: 0 }.take(15)
+            val rest = (songs - fav.toSet()).shuffled(rnd).take(30)
+            (fav + rest).shuffled(rnd)
+        }
     }
+
+    fun backupJson(): String = com.sudosoc.sudoplay.data.Backup.export(ctx, prefs)
+    fun restoreJson(json: String): Boolean = com.sudosoc.sudoplay.data.Backup.import(ctx, prefs, json)
 
     fun clearHistory() {
         plays = emptyMap(); recent = emptyList(); lastCounted = -1L
@@ -370,12 +432,25 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val c = controller ?: return
         c.sendCustomCommand(
             SessionCommand(PlaybackService.CMD_SLEEP, Bundle.EMPTY),
-            bundleOf(PlaybackService.KEY_MIN to minutes),
+            bundleOf(PlaybackService.KEY_MIN to minutes, PlaybackService.KEY_FADE to settings.sleepFade.value),
         )
         sleepEndsAt = if (minutes > 0) System.currentTimeMillis() + minutes * 60_000L else 0L
         sleepEndOfSong = minutes < 0
         sleepSongId = current?.id ?: -1L
         if (minutes > 0) settings.lastSleepMin.set(minutes)
+    }
+
+    fun applyMisc() {
+        controller?.sendCustomCommand(
+            SessionCommand(PlaybackService.CMD_MISC, Bundle.EMPTY),
+            bundleOf(PlaybackService.KEY_SKIP to settings.skipSilence.value),
+        )
+    }
+
+    fun changePitch(semi: Int) {
+        settings.pitchSemi.set(semi)
+        val c = controller ?: return
+        c.playbackParameters = PlaybackParameters(c.playbackParameters.speed, 2.0.pow(semi / 12.0).toFloat())
     }
 
     fun changeSpeedTo(s: Float) {

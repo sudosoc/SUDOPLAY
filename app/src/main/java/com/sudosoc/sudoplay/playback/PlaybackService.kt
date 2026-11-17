@@ -2,6 +2,7 @@
 
 package com.sudosoc.sudoplay.playback
 
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -38,7 +39,29 @@ import java.util.concurrent.Executors
 class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
     private val handler = Handler(Looper.getMainLooper())
-    private val sleepRunnable = Runnable { session?.player?.pause() }
+    private var fading = false
+    private var fadeStart = 0L
+    private var fadeLen = 15_000L
+    private val sleepRunnable = Runnable {
+        session?.player?.pause()
+        fading = false
+        exo.volume = baseVolume()
+    }
+    private val fadeStep = object : Runnable {
+        override fun run() {
+            if (!fading) return
+            val f = ((System.currentTimeMillis() - fadeStart).toFloat() / fadeLen).coerceIn(0f, 1f)
+            exo.volume = baseVolume() * (1f - f)
+            if (f < 1f) handler.postDelayed(this, 200)
+        }
+    }
+    private fun baseVolume(): Float = lastFx?.let { if (it.enabled) 10f.pow(it.preamp / 200f).coerceIn(0f, 1f) else 1f } ?: 1f
+    private fun startFade() { fading = true; fadeStart = System.currentTimeMillis(); handler.post(fadeStep) }
+    private fun cancelSleep() {
+        handler.removeCallbacks(sleepRunnable); handler.removeCallbacks(fadeStep); handler.removeCallbacks(startFadeRunnable)
+        if (fading) { fading = false; exo.volume = baseVolume() }
+    }
+    private val startFadeRunnable = Runnable { startFade() }
 
     // audio effects live here so they survive the activity being closed
     private var eq: Equalizer? = null
@@ -79,7 +102,12 @@ class PlaybackService : MediaSessionService() {
             }
         })
         attachEffects(player.audioSessionId)
+        val open = Intent(this, com.sudosoc.sudoplay.MainActivity::class.java)
+            .setAction(com.sudosoc.sudoplay.MainActivity.ACTION_OPEN_PLAYER)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val tap = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         session = MediaSession.Builder(this, player)
+            .setSessionActivity(tap)
             .setBitmapLoader(SudoBitmapLoader(this))
             .setCallback(Callback())
             .build()
@@ -120,7 +148,7 @@ class PlaybackService : MediaSessionService() {
         }
         loud?.let { runCatching { it.setTargetGain(st.loud); it.enabled = on && st.loud > 0 } }
         // preamp: attenuate before the effects so boosted EQ doesn't clip
-        exo.volume = if (on) 10f.pow(st.preamp / 200f).coerceIn(0f, 1f) else 1f
+        if (!fading) exo.volume = baseVolume()
         FxBus.set(st)
     }
 
@@ -132,7 +160,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
-        handler.removeCallbacks(sleepRunnable)
+        cancelSleep()
         releaseEffects()
         session?.run { player.release(); release() }
         session = null
@@ -148,6 +176,7 @@ class PlaybackService : MediaSessionService() {
                 .add(SessionCommand(CMD_SLEEP, Bundle.EMPTY))
                 .add(SessionCommand(CMD_EQ_INFO, Bundle.EMPTY))
                 .add(SessionCommand(CMD_EQ_SET, Bundle.EMPTY))
+                .add(SessionCommand(CMD_MISC, Bundle.EMPTY))
                 .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(cmds)
@@ -163,9 +192,16 @@ class PlaybackService : MediaSessionService() {
             when (customCommand.customAction) {
                 CMD_SLEEP -> {
                     val minutes = args.getInt(KEY_MIN, 0)
-                    handler.removeCallbacks(sleepRunnable)
+                    cancelSleep()
                     exo.pauseAtEndOfMediaItems = minutes < 0   // -1 = stop when this song ends
-                    if (minutes > 0) handler.postDelayed(sleepRunnable, minutes * 60_000L)
+                    if (minutes > 0) {
+                        val total = minutes * 60_000L
+                        handler.postDelayed(sleepRunnable, total)
+                        if (args.getBoolean(KEY_FADE, false)) {
+                            fadeLen = minOf(15_000L, total / 2)
+                            handler.postDelayed(startFadeRunnable, total - fadeLen)
+                        }
+                    }
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
                 CMD_EQ_INFO -> {
@@ -181,6 +217,10 @@ class PlaybackService : MediaSessionService() {
                     }
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS, out))
                 }
+                CMD_MISC -> {
+                    exo.skipSilenceEnabled = args.getBoolean(KEY_SKIP, false)
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
                 CMD_EQ_SET -> {
                     applyFx(FxState.fromJson(args.getString(KEY_FX)))
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
@@ -194,6 +234,9 @@ class PlaybackService : MediaSessionService() {
         const val CMD_SLEEP = "sudoplay.sleep"
         const val CMD_EQ_INFO = "sudoplay.eq.info"
         const val CMD_EQ_SET = "sudoplay.eq.set"
+        const val CMD_MISC = "sudoplay.misc"
+        const val KEY_SKIP = "skip"
+        const val KEY_FADE = "fade"
         const val KEY_MIN = "minutes"
         const val KEY_FX = "fx"
         const val KEY_BANDS = "bands"

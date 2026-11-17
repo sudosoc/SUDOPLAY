@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
@@ -309,4 +310,23 @@ fun StaticChip(icon: ImageVector, text: String, active: Boolean = false) {
         Spacer(Modifier.width(6.dp))
         Text(text, color = if (active) t.primary else t.text, maxLines = 1)
     }
+}
+
+/** A-B loop: tap once to mark A, again to mark B (the part between loops), a third time to clear. */
+@Composable
+fun AbButton(vm: PlayerViewModel) {
+    val t = LocalSudo.current
+    val a = vm.abA
+    val b = vm.abB
+    val label = when {
+        a == null -> "A–B"
+        b == null -> "A ${fmt(a)} →"
+        else -> "${fmt(a)} ⟲ ${fmt(b)}"
+    }
+    val on = a != null
+    Text(
+        label, color = if (on) t.primary else t.text.copy(alpha = 0.7f), fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+        fontSize = 12.sp, style = TextStyle(fontFeatureSettings = "tnum"),
+        modifier = Modifier.chipLook(on).clickable { vm.abCycle() }.padding(horizontal = 12.dp, vertical = 4.dp),
+    )
 }

@@ -40,3 +40,10 @@ Android music player — Kotlin, Jetpack Compose, Media3 (ExoPlayer).
 - **Appearance**: 37 player themes shown as live previews of the real page, 13 seek-bar styles, 5 icon families, choose which player buttons are visible. Popup menus share one themed look.
 - **Real haptics** through the system Vibrator with adjustable strength and a test button.
 - **Extras**: minimum track length, hidden folders, rescan, .lrc access, covers reset. Library refreshes by itself; the queue and position are restored on launch.
+
+## v0.5
+
+- Tapping the media notification (anywhere except its buttons) opens the app straight on the player.
+- Setting to hide the gesture badge and keep only the rubber stretch.
+- Navigation bar: choose which tabs show and put it at the bottom, top, left or right.
+- Gifts: A-B loop, pitch (key shift), skip silence, sleep-timer fade-out, shake to skip, mono switch, "Mix for you" smart list, your stats, share a song, backup / restore of everything.

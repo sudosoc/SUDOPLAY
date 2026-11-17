@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -27,16 +28,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sudosoc.sudoplay.PlayerViewModel
 
-private data class Tab(val label: String, val icon: ImageVector)
+private data class Tab(val index: Int, val label: String, val icon: ImageVector)
 
 @Composable
-private fun tabsList() = listOf(
-    Tab("Songs", I.MusicNote),
-    Tab("Albums", I.Album),
-    Tab("Browse", I.Folder),
-    Tab("Playlists", I.LibraryMusic),
-    Tab("Settings", I.Settings),
-)
+private fun tabsList(vm: PlayerViewModel): List<Tab> {
+    val st = vm.settings
+    return buildList {
+        if (st.navSongs.value) add(Tab(0, "Songs", I.MusicNote))
+        if (st.navAlbums.value) add(Tab(1, "Albums", I.Album))
+        if (st.navBrowse.value) add(Tab(2, "Browse", I.Folder))
+        if (st.navPlaylists.value) add(Tab(3, "Playlists", I.LibraryMusic))
+        add(Tab(4, "Settings", I.Settings))
+    }
+}
 
 /** Position of the Now Playing sheet: 0 = hidden, 1 = fully open. Follows the finger while dragging, springs when released. */
 @Stable
@@ -82,12 +86,18 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
             sheet.heightPx = with(LocalDensity.current) { maxHeight.toPx() }
 
             SudoBackground(vm.current) {
-                Column(Modifier.fillMaxSize().systemBarsPadding()) {
+                val tabs = tabsList(vm)
+                val cur = if (tabs.any { it.index == tab }) tab else tabs.first().index
+                val pos = vm.settings.navPos.value
+                val nav: @Composable () -> Unit = {
+                    NavBar(tabs, cur, vertical = pos == "left" || pos == "right") { tab = it; detail = null; vm.haptics.tick() }
+                }
+                val body: @Composable ColumnScope.() -> Unit = {
                     Box(Modifier.weight(1f)) {
                         when {
                             !granted -> PermissionGate(onRequest)
                             detail != null -> DetailScreen(vm, detail!!) { detail = null }
-                            else -> when (tab) {
+                            else -> when (cur) {
                                 0 -> SongsTab(vm)
                                 1 -> AlbumsTab(vm) { detail = it }
                                 2 -> BrowseTab(vm) { detail = it }
@@ -97,7 +107,15 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                         }
                     }
                     if (vm.current != null) MiniPlayer(vm, sheet)
-                    BottomBar(tab) { tab = it; detail = null }
+                }
+                when (pos) {
+                    "top" -> Column(Modifier.fillMaxSize().systemBarsPadding()) { nav(); body() }
+                    "left" -> Row(Modifier.fillMaxSize().systemBarsPadding()) { nav(); Column(Modifier.weight(1f).fillMaxHeight(), content = body) }
+                    "right" -> Row(Modifier.fillMaxSize().systemBarsPadding()) { Column(Modifier.weight(1f).fillMaxHeight(), content = body); nav() }
+                    else -> Column(Modifier.fillMaxSize().systemBarsPadding()) { body(); nav() }
+                }
+                LaunchedEffect(vm.wantPlayer, vm.current) {
+                    if (vm.wantPlayer && vm.current != null) { sheet.open(); vm.playerOpened() }
                 }
                 // Later-registered BackHandlers win, so Now Playing is declared last.
                 BackHandler(enabled = detail != null) { detail = null }
@@ -117,22 +135,28 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
 }
 
 @Composable
-private fun BottomBar(selected: Int, onSelect: (Int) -> Unit) {
+private fun NavBar(tabs: List<Tab>, selected: Int, vertical: Boolean, onSelect: (Int) -> Unit) {
     val t = LocalSudo.current
-    Row(
-        Modifier.padding(horizontal = 10.dp, vertical = 8.dp).fillMaxWidth().sudoPanel(RoundedCornerShape(26.dp)).padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceAround,
-    ) {
-        tabsList().forEachIndexed { i, tb ->
-            val on = i == selected
-            Column(
-                Modifier.clickable { onSelect(i) }.padding(horizontal = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(tb.icon, null, tint = if (on) t.primary else t.text.copy(alpha = 0.6f))
-                Text(tb.label, color = if (on) t.primary else t.text.copy(alpha = 0.6f), fontSize = 11.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
-            }
+    val items: @Composable (Tab) -> Unit = { tb ->
+        val on = tb.index == selected
+        Column(
+            Modifier.clip(RoundedCornerShape(16.dp)).clickable { onSelect(tb.index) }.padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(tb.icon, null, tint = if (on) t.primary else t.text.copy(alpha = 0.6f))
+            Text(tb.label, color = if (on) t.primary else t.text.copy(alpha = 0.6f), fontSize = 11.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
         }
+    }
+    if (vertical) {
+        Column(
+            Modifier.padding(horizontal = 6.dp, vertical = 8.dp).fillMaxHeight().sudoPanel(RoundedCornerShape(26.dp)).padding(horizontal = 4.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.SpaceEvenly, horizontalAlignment = Alignment.CenterHorizontally,
+        ) { tabs.forEach { items(it) } }
+    } else {
+        Row(
+            Modifier.padding(horizontal = 10.dp, vertical = 8.dp).fillMaxWidth().sudoPanel(RoundedCornerShape(26.dp)).padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+        ) { tabs.forEach { items(it) } }
     }
 }
 

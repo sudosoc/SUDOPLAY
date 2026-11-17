@@ -153,6 +153,7 @@ fun SongRow(song: Song, vm: PlayerViewModel, onClick: () -> Unit, extraMenu: (@C
     val t = LocalSudo.current
     val isCur = vm.current?.id == song.id
     var menu by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -181,6 +182,7 @@ fun SongRow(song: Song, vm: PlayerViewModel, onClick: () -> Unit, extraMenu: (@C
                     onClick = { vm.store.toggleFav(song.id); menu = false },
                 )
                 DropdownMenuItem(text = { Text("Add to playlist…") }, onClick = { vm.playlistTarget = song; menu = false })
+                DropdownMenuItem(text = { Text("Share") }, onClick = { shareSong(ctx, song); menu = false })
                 extraMenu?.invoke { menu = false }
             }
         }
@@ -239,4 +241,14 @@ fun CircleIcon(onClick: () -> Unit, size: Dp = 64.dp, content: @Composable () ->
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { content() }
+}
+
+fun shareSong(ctx: android.content.Context, song: Song) {
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "audio/*"
+        putExtra(android.content.Intent.EXTRA_STREAM, song.uri)
+        putExtra(android.content.Intent.EXTRA_TITLE, song.title)
+        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    runCatching { ctx.startActivity(android.content.Intent.createChooser(send, "Share ${song.title}").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
 }

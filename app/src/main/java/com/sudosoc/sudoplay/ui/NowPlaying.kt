@@ -95,14 +95,14 @@ import kotlin.math.sin
 class PlayerButtons(
     val shuffle: Boolean = true, val prev: Boolean = true, val next: Boolean = true, val repeat: Boolean = true,
     val fav: Boolean = true, val playlist: Boolean = true, val lyrics: Boolean = true, val queue: Boolean = true,
-    val speed: Boolean = true, val eq: Boolean = true, val sleep: Boolean = true,
+    val speed: Boolean = true, val eq: Boolean = true, val sleep: Boolean = true, val ab: Boolean = true,
 ) {
     val anyChip get() = speed || eq || sleep
 }
 
 fun playerButtons(s: AppSettings) = PlayerButtons(
     s.btnShuffle.value, s.btnPrev.value, s.btnNext.value, s.btnRepeat.value, s.btnFav.value, s.btnPlaylist.value,
-    s.btnLyrics.value, s.btnQueue.value, s.btnSpeed.value, s.btnEq.value, s.btnSleep.value,
+    s.btnLyrics.value, s.btnQueue.value, s.btnSpeed.value, s.btnEq.value, s.btnSleep.value, s.btnAb.value,
 )
 
 @Immutable
@@ -160,7 +160,7 @@ private fun PlayerContent(vm: PlayerViewModel, pt: PlayerTheme, sheet: SheetStat
         onDispose { view.keepScreenOn = false }
     }
 
-    fun flash(i: ImageVector, dir: Int = 0) { hud = HudEvent(++hudId, i, dir) }
+    fun flash(i: ImageVector, dir: Int = 0) { if (s.gestureIcon.value) hud = HudEvent(++hudId, i, dir) }
 
     val icPlay = I.PlayArrow; val icPause = I.Pause; val icNext = I.SkipNext; val icPrev = I.SkipPrevious
 
@@ -221,6 +221,7 @@ private fun PlayerContent(vm: PlayerViewModel, pt: PlayerTheme, sheet: SheetStat
             PlayerLayout(
                 pt = pt, art = art, snap = snap, btn = btn, seekStyle = s.seekStyle.value, mode = mode, act = actions,
                 animated = true, onArtBounds = { artRect = it },
+                abSlot = { AbButton(vm) },
                 middle = middle,
                 extras = {
                     if (btn.speed) SpeedChip(vm)
@@ -269,6 +270,7 @@ fun PlayerLayout(
     interactive: Boolean = true,
     onArtBounds: (Rect?) -> Unit = {},
     middle: (@Composable BoxScope.() -> Unit)? = null,
+    abSlot: (@Composable () -> Unit)? = null,
     extras: @Composable RowScope.() -> Unit = {},
 ) {
     val t = LocalSudo.current
@@ -322,6 +324,8 @@ fun PlayerLayout(
         )
         Row(Modifier.fillMaxWidth()) {
             Text(fmt(snap.position), color = t.text.copy(alpha = 0.65f), style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.weight(1f))
+            if (btn.ab) { if (abSlot != null) abSlot() else Text("A–B", color = t.text.copy(alpha = 0.7f), fontSize = 12.sp) }
             Spacer(Modifier.weight(1f))
             Text(fmt(snap.duration), color = t.text.copy(alpha = 0.65f), style = MaterialTheme.typography.labelMedium)
         }
