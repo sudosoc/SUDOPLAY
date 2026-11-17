@@ -8,7 +8,7 @@ import android.provider.MediaStore.Audio.Media as M
 
 class MusicRepository(private val ctx: Context) {
 
-    fun loadSongs(): List<Song> {
+    fun loadSongs(minDurationSec: Int = 20): List<Song> {
         val collection = if (Build.VERSION.SDK_INT >= 29)
             MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
         else MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
@@ -21,7 +21,7 @@ class MusicRepository(private val ctx: Context) {
         val out = ArrayList<Song>()
         ctx.contentResolver.query(
             collection, projection,
-            "${M.IS_MUSIC} != 0 AND ${M.DURATION} >= 20000",
+            "${M.IS_MUSIC} != 0 AND ${M.DURATION} >= ${minDurationSec * 1000L}",
             null, "${M.TITLE} COLLATE NOCASE ASC",
         )?.use { c ->
             val iId = c.getColumnIndexOrThrow(M._ID)

@@ -17,6 +17,10 @@ import android.os.Looper
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.common.util.BitmapLoader
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
@@ -26,7 +30,9 @@ import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
+import com.sudosoc.sudoplay.data.FxState
 import java.util.concurrent.Callable
+import kotlin.math.pow
 import java.util.concurrent.Executors
 
 class PlaybackService : MediaSessionService() {
@@ -39,11 +45,21 @@ class PlaybackService : MediaSessionService() {
     private var bass: BassBoost? = null
     private var virt: Virtualizer? = null
     private var loud: LoudnessEnhancer? = null
-    private var lastCfg: Bundle? = null
+    private var lastFx: FxState? = null
+    private lateinit var exo: ExoPlayer
+    private val fxProcessor = FxProcessor()
 
     override fun onCreate() {
         super.onCreate()
-        val player = ExoPlayer.Builder(this)
+        val renderers = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
+                DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .setAudioProcessors(arrayOf<AudioProcessor>(fxProcessor))
+                    .build()
+        }
+        val player = ExoPlayer.Builder(this, renderers)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -54,8 +70,13 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
+        exo = player
         player.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) = attachEffects(audioSessionId)
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                // the "end of song" sleep timer is one-shot
+                if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) exo.pauseAtEndOfMediaItems = false
+            }
         })
         attachEffects(player.audioSessionId)
         session = MediaSession.Builder(this, player)
@@ -71,7 +92,7 @@ class PlaybackService : MediaSessionService() {
         bass = runCatching { BassBoost(0, sessionId) }.getOrNull()
         virt = runCatching { Virtualizer(0, sessionId) }.getOrNull()
         loud = runCatching { LoudnessEnhancer(sessionId) }.getOrNull()
-        lastCfg?.let { applyCfg(it) }
+        lastFx?.let { applyFx(it) }
     }
 
     private fun releaseEffects() {
@@ -80,19 +101,27 @@ class PlaybackService : MediaSessionService() {
         eq = null; bass = null; virt = null; loud = null
     }
 
-    private fun applyCfg(b: Bundle) {
-        lastCfg = b
-        val on = b.getBoolean(KEY_ON)
+    private fun applyFx(st: FxState) {
+        lastFx = st
+        val on = st.enabled
         eq?.let { e ->
             runCatching {
                 e.enabled = on
-                val lv = b.getIntArray(KEY_LEVELS)
-                if (lv != null) for (i in 0 until minOf(lv.size, e.numberOfBands.toInt())) e.setBandLevel(i.toShort(), lv[i].toShort())
+                for (i in 0 until minOf(st.levels.size, e.numberOfBands.toInt())) e.setBandLevel(i.toShort(), st.levels[i].toShort())
             }
         }
-        bass?.let { runCatching { val s = b.getInt(KEY_BASS); if (it.strengthSupported) it.setStrength(s.toShort()); it.enabled = on && s > 0 } }
-        virt?.let { runCatching { val s = b.getInt(KEY_VIRT); if (it.strengthSupported) it.setStrength(s.toShort()); it.enabled = on && s > 0 } }
-        loud?.let { runCatching { val g = b.getInt(KEY_LOUD); it.setTargetGain(g); it.enabled = on && g > 0 } }
+        bass?.let { runCatching { if (it.strengthSupported) it.setStrength(st.bass.toShort()); it.enabled = on && st.bass > 0 } }
+        virt?.let {
+            runCatching {
+                if (st.virtOn) it.forceVirtualizationMode(when (st.virtMode) { 1 -> Virtualizer.VIRTUALIZATION_MODE_BINAURAL; 2 -> Virtualizer.VIRTUALIZATION_MODE_TRANSAURAL; else -> Virtualizer.VIRTUALIZATION_MODE_AUTO })
+                if (it.strengthSupported) it.setStrength(st.virt.toShort())
+                it.enabled = on && st.virtOn && st.virt > 0
+            }
+        }
+        loud?.let { runCatching { it.setTargetGain(st.loud); it.enabled = on && st.loud > 0 } }
+        // preamp: attenuate before the effects so boosted EQ doesn't clip
+        exo.volume = if (on) 10f.pow(st.preamp / 200f).coerceIn(0f, 1f) else 1f
+        FxBus.set(st)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
@@ -135,6 +164,7 @@ class PlaybackService : MediaSessionService() {
                 CMD_SLEEP -> {
                     val minutes = args.getInt(KEY_MIN, 0)
                     handler.removeCallbacks(sleepRunnable)
+                    exo.pauseAtEndOfMediaItems = minutes < 0   // -1 = stop when this song ends
                     if (minutes > 0) handler.postDelayed(sleepRunnable, minutes * 60_000L)
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
@@ -152,7 +182,7 @@ class PlaybackService : MediaSessionService() {
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS, out))
                 }
                 CMD_EQ_SET -> {
-                    applyCfg(args)
+                    applyFx(FxState.fromJson(args.getString(KEY_FX)))
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
             }
@@ -165,11 +195,7 @@ class PlaybackService : MediaSessionService() {
         const val CMD_EQ_INFO = "sudoplay.eq.info"
         const val CMD_EQ_SET = "sudoplay.eq.set"
         const val KEY_MIN = "minutes"
-        const val KEY_ON = "enabled"
-        const val KEY_LEVELS = "levels"
-        const val KEY_BASS = "bass"
-        const val KEY_VIRT = "virt"
-        const val KEY_LOUD = "loud"
+        const val KEY_FX = "fx"
         const val KEY_BANDS = "bands"
         const val KEY_MINLVL = "min"
         const val KEY_MAXLVL = "max"

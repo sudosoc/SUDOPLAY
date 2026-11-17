@@ -5,6 +5,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +26,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -53,8 +58,13 @@ fun rememberArt(song: Song?, size: Int): State<Bitmap?> {
 
 @Composable
 fun Artwork(song: Song?, modifier: Modifier = Modifier, size: Int = 256, corner: Dp = 12.dp, shape: Shape? = null) {
-    val t = LocalSudo.current
     val bmp by rememberArt(song, size)
+    ArtImage(bmp, modifier, corner, shape)
+}
+
+@Composable
+fun ArtImage(bmp: Bitmap?, modifier: Modifier = Modifier, corner: Dp = 12.dp, shape: Shape? = null) {
+    val t = LocalSudo.current
     Box(
         modifier
             .clip(shape ?: RoundedCornerShape(corner))
@@ -63,7 +73,7 @@ fun Artwork(song: Song?, modifier: Modifier = Modifier, size: Int = 256, corner:
     ) {
         val b = bmp
         if (b != null) Image(b.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        else Icon(Icons.Rounded.MusicNote, null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.fillMaxSize(0.45f))
+        else Icon(I.MusicNote, null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.fillMaxSize(0.45f))
     }
 }
 
@@ -93,6 +103,17 @@ fun Modifier.sudoPanel(shape: Shape = RoundedCornerShape(20.dp)): Modifier {
 @Composable
 fun SudoBackground(artSong: Song?, content: @Composable BoxScope.() -> Unit) {
     val t = LocalSudo.current
+    val bmp by rememberArt(artSong, 256)
+    Box(Modifier.fillMaxSize()) {
+        AppBackdrop(if (t.style == Style.Art) bmp else null)
+        content()
+    }
+}
+
+/** The themed app background (gradient + glow blobs, or blurred artwork for the Art style). */
+@Composable
+fun AppBackdrop(art: Bitmap?) {
+    val t = LocalSudo.current
     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(t.bgTop, t.bgBottom)))) {
         when (t.style) {
             Style.Glass, Style.Gradient -> {
@@ -111,8 +132,7 @@ fun SudoBackground(artSong: Song?, content: @Composable BoxScope.() -> Unit) {
                 })
             }
             Style.Art -> {
-                val bmp by rememberArt(artSong, 256)
-                bmp?.let {
+                art?.let {
                     Image(
                         it.asImageBitmap(), null,
                         Modifier.fillMaxSize().blur(48.dp).alpha(if (t.dark) 0.75f else 0.55f),
@@ -125,7 +145,6 @@ fun SudoBackground(artSong: Song?, content: @Composable BoxScope.() -> Unit) {
             }
             Style.Solid, Style.Soft, Style.Outline -> {}
         }
-        content()
     }
 }
 
@@ -151,10 +170,10 @@ fun SongRow(song: Song, vm: PlayerViewModel, onClick: () -> Unit, extraMenu: (@C
                 style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
-        if (isCur && vm.isPlaying) Icon(Icons.Rounded.Equalizer, null, tint = t.primary, modifier = Modifier.padding(end = 4.dp))
+        if (isCur && vm.isPlaying) Icon(I.Equalizer, null, tint = t.primary, modifier = Modifier.padding(end = 4.dp))
         Box {
-            IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, null, tint = t.text.copy(alpha = 0.7f)) }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            IconButton(onClick = { menu = true }) { Icon(I.MoreVert, null, tint = t.text.copy(alpha = 0.7f)) }
+            SudoMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { Text("Play next") }, onClick = { vm.playNext(song); menu = false })
                 DropdownMenuItem(text = { Text("Add to queue") }, onClick = { vm.addToQueue(song); menu = false })
                 DropdownMenuItem(
@@ -169,12 +188,27 @@ fun SongRow(song: Song, vm: PlayerViewModel, onClick: () -> Unit, extraMenu: (@C
 }
 
 @Composable
-fun MiniPlayer(vm: PlayerViewModel, onOpen: () -> Unit) {
+fun MiniPlayer(vm: PlayerViewModel, sheet: SheetState) {
     val t = LocalSudo.current
     val song = vm.current ?: return
+    val density = LocalDensity.current
+    var hx by remember { mutableFloatStateOf(0f) }
+    val vState = rememberDraggableState { dy -> sheet.dragBy(dy) }
+    val hState = rememberDraggableState { dx -> hx += dx }
     Column(
         Modifier.padding(horizontal = 10.dp, vertical = 6.dp).fillMaxWidth()
-            .sudoPanel(RoundedCornerShape(22.dp)).clickable(onClick = onOpen)
+            .graphicsLayer { translationX = hx * 0.35f; alpha = 1f - (kotlin.math.abs(hx) / 900f).coerceIn(0f, 0.4f) }
+            .sudoPanel(RoundedCornerShape(22.dp))
+            .clickable { sheet.open() }
+            .draggable(vState, Orientation.Vertical, onDragStarted = { sheet.dragStart() }, onDragStopped = { v -> sheet.settle(v) })
+            .draggable(
+                hState, Orientation.Horizontal,
+                onDragStopped = {
+                    val thr = with(density) { 80.dp.toPx() }
+                    if (hx < -thr) { vm.next(); vm.haptics.click() } else if (hx > thr) { vm.previous(); vm.haptics.click() }
+                    hx = 0f
+                },
+            )
     ) {
         Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Artwork(song, Modifier.size(44.dp), 128, 12.dp)
@@ -183,10 +217,10 @@ fun MiniPlayer(vm: PlayerViewModel, onOpen: () -> Unit) {
                 Text(song.title, color = t.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(song.artist, color = t.text.copy(alpha = 0.65f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            IconButton(onClick = vm::togglePlay) {
-                Icon(if (vm.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, null, tint = t.text, modifier = Modifier.size(30.dp))
+            IconButton(onClick = { vm.haptics.click(); vm.togglePlay() }) {
+                Icon(if (vm.isPlaying) I.Pause else I.PlayArrow, null, tint = t.text, modifier = Modifier.size(30.dp))
             }
-            IconButton(onClick = vm::next) { Icon(Icons.Rounded.SkipNext, null, tint = t.text) }
+            IconButton(onClick = { vm.haptics.click(); vm.next() }) { Icon(I.SkipNext, null, tint = t.text) }
         }
         val p = if (vm.duration > 0) (vm.position.toFloat() / vm.duration).coerceIn(0f, 1f) else 0f
         LinearProgressIndicator(

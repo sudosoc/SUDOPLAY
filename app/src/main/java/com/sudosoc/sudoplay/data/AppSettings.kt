@@ -34,7 +34,29 @@ class AppSettings(prefs: SharedPreferences) {
     val scrub = BoolSetting(prefs, "g_scrub", true)
     /** Seconds covered by dragging across the full screen width while scrubbing. */
     val scrubSeconds = IntSetting(prefs, "g_scrub_secs", 120)
-    val haptics = BoolSetting(prefs, "g_haptics", true)
+    /** 0 off, 1 light, 2 medium, 3 strong */
+    val hapticLevel = IntSetting(prefs, "g_haptic_level", 2)
+
+    // Player customisation
+    val seekStyle = StringSetting(prefs, "seek_style", "classic")
+    val iconStyle = StringSetting(prefs, "icon_style", "Rounded")
+    val lastSpeedPct = IntSetting(prefs, "last_speed", 125)
+    val lastSleepMin = IntSetting(prefs, "last_sleep", 30)
+    val btnShuffle = BoolSetting(prefs, "b_shuffle", true)
+    val btnPrev = BoolSetting(prefs, "b_prev", true)
+    val btnNext = BoolSetting(prefs, "b_next", true)
+    val btnRepeat = BoolSetting(prefs, "b_repeat", true)
+    val btnFav = BoolSetting(prefs, "b_fav", true)
+    val btnPlaylist = BoolSetting(prefs, "b_playlist", true)
+    val btnLyrics = BoolSetting(prefs, "b_lyrics", true)
+    val btnQueue = BoolSetting(prefs, "b_queue", true)
+    val btnSpeed = BoolSetting(prefs, "b_speed", true)
+    val btnEq = BoolSetting(prefs, "b_eq", true)
+    val btnSleep = BoolSetting(prefs, "b_sleep", true)
+
+    // Library (Extras)
+    val minDurationSec = IntSetting(prefs, "lib_min_dur", 20)
+    val hiddenFolders = StringSetting(prefs, "lib_hidden", "")
 
     // Features
     val keepScreenOn = BoolSetting(prefs, "f_keep_on", false)

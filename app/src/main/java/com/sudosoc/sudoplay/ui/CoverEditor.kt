@@ -77,12 +77,12 @@ fun CoverFlow(song: Song, onDismiss: () -> Unit) {
                 Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
                     Text("Change cover", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(song.title, color = t.text.copy(alpha = 0.6f), maxLines = 1, modifier = Modifier.padding(bottom = 12.dp))
-                    SourceRow(Icons.Rounded.Collections, "Choose from app", "Ready-made covers inside SUDOPLAY") { step = Step.Gallery }
-                    SourceRow(Icons.Rounded.PhotoLibrary, "Choose from device", "Pick any photo from your phone") {
+                    SourceRow(I.Collections, "Choose from app", "Ready-made covers inside SUDOPLAY") { step = Step.Gallery }
+                    SourceRow(I.PhotoLibrary, "Choose from device", "Pick any photo from your phone") {
                         picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                     }
                     if (CoverStore.hasCustom(ctx, song)) {
-                        SourceRow(Icons.Rounded.RestartAlt, "Use original cover", "Remove the custom cover") {
+                        SourceRow(I.RestartAlt, "Use original cover", "Remove the custom cover") {
                             CoverStore.reset(ctx, song); onDismiss()
                         }
                     }
@@ -127,7 +127,7 @@ private fun GalleryDialog(onBack: () -> Unit, onPick: (Bitmap) -> Unit) {
     Dialog(onDismissRequest = onBack, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(Modifier.fillMaxSize().background(t.bgTop).systemBarsPadding()) {
             Row(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onBack) { Icon(Icons.Rounded.Close, null, tint = t.text) }
+                IconButton(onBack) { Icon(I.Close, null, tint = t.text) }
                 Text("Covers in SUDOPLAY", color = t.text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             }
             LazyVerticalGrid(GridCells.Fixed(3), contentPadding = PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

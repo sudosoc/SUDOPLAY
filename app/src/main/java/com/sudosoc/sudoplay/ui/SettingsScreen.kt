@@ -41,22 +41,28 @@ import com.sudosoc.sudoplay.data.CoverStore
 @Composable
 fun SettingsTab(vm: PlayerViewModel) {
     var page by rememberSaveable { mutableStateOf("home") }
-    var showEq by remember { mutableStateOf(false) }
 
     BackHandler(enabled = page != "home") {
-        page = when (page) { "app_themes", "player_themes" -> "appearance"; else -> "home" }
+        page = when (page) {
+            "app_themes", "player_themes", "seek_styles", "icon_styles", "player_buttons" -> "appearance"
+            "hidden_folders" -> "extras"
+            else -> "home"
+        }
     }
 
     when (page) {
         "appearance" -> AppearancePage(vm, onOpen = { page = it }, onBack = { page = "home" })
         "app_themes" -> AppThemesPage(vm) { page = "appearance" }
         "player_themes" -> PlayerThemesPage(vm) { page = "appearance" }
-        "extras" -> ExtrasPage(vm, onEq = { showEq = true }) { page = "home" }
+        "seek_styles" -> SeekStylesPage(vm) { page = "appearance" }
+        "icon_styles" -> IconStylesPage(vm) { page = "appearance" }
+        "player_buttons" -> PlayerButtonsPage(vm) { page = "appearance" }
+        "extras" -> ExtrasPage(vm, onOpen = { page = it }) { page = "home" }
+        "hidden_folders" -> HiddenFoldersPage(vm) { page = "extras" }
         "props" -> PropertiesPage(vm) { page = "home" }
         "features" -> FeaturesPage(vm) { page = "home" }
         else -> HomePage(vm) { page = it }
     }
-    if (showEq) EqSheet(vm) { showEq = false }
 }
 
 // ---------------------------------------------------------------- shared bits
@@ -64,7 +70,7 @@ fun SettingsTab(vm: PlayerViewModel) {
 private fun SubHeader(title: String, onBack: () -> Unit) {
     val t = LocalSudo.current
     Row(Modifier.padding(top = 6.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = t.text) }
+        IconButton(onBack) { Icon(I.ArrowBack, null, tint = t.text) }
         Text(title, color = t.text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     }
 }
@@ -104,7 +110,7 @@ private fun SwitchRow(title: String, sub: String?, checked: Boolean, onChange: (
 }
 
 @Composable
-private fun SliderRow(title: String, valueText: String, value: Float, range: ClosedFloatingPointRange<Float>, steps: Int, onChange: (Float) -> Unit) {
+private fun SliderRow(title: String, valueText: String, value: Float, range: ClosedFloatingPointRange<Float>, steps: Int, onDone: (() -> Unit)? = null, onChange: (Float) -> Unit) {
     val t = LocalSudo.current
     RowCard {
         Column(Modifier.weight(1f)) {
@@ -112,7 +118,7 @@ private fun SliderRow(title: String, valueText: String, value: Float, range: Clo
                 Text(title, color = t.text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 Text(valueText, color = t.primary, fontWeight = FontWeight.Bold)
             }
-            Slider(value, onChange, valueRange = range, steps = steps,
+            Slider(value, onChange, valueRange = range, steps = steps, onValueChangeFinished = onDone,
                 colors = SliderDefaults.colors(thumbColor = t.primary, activeTrackColor = t.primary, inactiveTrackColor = t.text.copy(alpha = 0.2f)))
         }
     }
@@ -125,7 +131,7 @@ private fun NavRow(icon: ImageVector, title: String, sub: String?, onClick: () -
         Icon(icon, null, tint = t.primary)
         Spacer(Modifier.width(14.dp))
         TitleSub(title, sub, Modifier.weight(1f))
-        Icon(Icons.Rounded.ChevronRight, null, tint = t.text.copy(alpha = 0.5f))
+        Icon(I.ChevronRight, null, tint = t.text.copy(alpha = 0.5f))
     }
 }
 
@@ -135,11 +141,11 @@ private fun HomePage(vm: PlayerViewModel, onOpen: (String) -> Unit) {
     val t = LocalSudo.current
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle("Settings")
-        BigSection(Icons.Rounded.Palette, "Appearance", "المظهر", "App themes and player-page themes") { onOpen("appearance") }
-        BigSection(Icons.Rounded.Extension, "Extras", "الإضافات", "Equalizer, lyrics files, sleep timer, covers") { onOpen("extras") }
-        BigSection(Icons.Rounded.Tune, "Properties", "الخصائص", "Gestures, seek sensitivity, haptics") { onOpen("props") }
-        BigSection(Icons.Rounded.AutoAwesome, "Features", "المميزات", "Screen, lyrics, play history") { onOpen("features") }
-        Text("SUDOPLAY 0.3.0 • by SUDOSOC", color = t.text.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall,
+        BigSection(I.Palette, "Appearance", "المظهر", "App themes and player-page themes") { onOpen("appearance") }
+        BigSection(I.Extension, "Extras", "الإضافات", "Library filters, hidden folders, .lrc lyrics, covers") { onOpen("extras") }
+        BigSection(I.Tune, "Properties", "الخصائص", "Gestures, seek sensitivity, vibration") { onOpen("props") }
+        BigSection(I.AutoAwesome, "Features", "المميزات", "Screen, lyrics, play history") { onOpen("features") }
+        Text("SUDOPLAY 0.4.0 • by SUDOSOC", color = t.text.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(20.dp))
     }
 }
@@ -160,17 +166,24 @@ private fun BigSection(icon: ImageVector, title: String, arabic: String, desc: S
             }
             Text(desc, color = t.text.copy(alpha = 0.62f), style = MaterialTheme.typography.bodySmall)
         }
-        Icon(Icons.Rounded.ChevronRight, null, tint = t.text.copy(alpha = 0.5f))
+        Icon(I.ChevronRight, null, tint = t.text.copy(alpha = 0.5f))
     }
 }
 
 // ---------------------------------------------------------------- appearance
 @Composable
 private fun AppearancePage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize()) {
+    val s = vm.settings
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         SubHeader("Appearance", onBack)
-        NavRow(Icons.Rounded.Apps, "App themes", "${Themes.byId(vm.settings.theme.value).name} • ${Themes.all.size} themes") { onOpen("app_themes") }
-        NavRow(Icons.Rounded.PlayCircle, "Player themes", "${PlayerThemes.byId(vm.settings.playerTheme.value).name} • ${PlayerThemes.all.size} looks") { onOpen("player_themes") }
+        SectionLabel("Themes")
+        NavRow(I.Apps, "App themes", "${Themes.byId(s.theme.value).name} • ${Themes.all.size} themes") { onOpen("app_themes") }
+        NavRow(I.PlayCircle, "Player themes", "${PlayerThemes.byId(s.playerTheme.value).name} • ${PlayerThemes.all.size} looks, live previews") { onOpen("player_themes") }
+        SectionLabel("Player page")
+        NavRow(I.Tune, "Seek bar style", "${SeekStyles.firstOrNull { it.first == s.seekStyle.value }?.second ?: "Classic"} • ${SeekStyles.size} shapes") { onOpen("seek_styles") }
+        NavRow(I.Palette, "Icon style", "${runCatching { IconStyle.valueOf(s.iconStyle.value) }.getOrDefault(IconStyle.Rounded).label} • ${IconStyle.entries.size} families") { onOpen("icon_styles") }
+        NavRow(I.Extension, "Player buttons", "Choose which buttons are shown") { onOpen("player_buttons") }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -227,107 +240,160 @@ private fun ThemeCard(th: AppTheme, selected: Boolean, onClick: () -> Unit) {
                 Text(th.style.label + if (th.dynamic) " • wallpaper colors" else "", color = th.text.copy(alpha = 0.7f), style = MaterialTheme.typography.labelSmall)
             }
         }
-        if (selected) Icon(Icons.Rounded.CheckCircle, null, tint = th.primary, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp))
+        if (selected) Icon(I.CheckCircle, null, tint = th.primary, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp))
     }
 }
 
 @Composable
 private fun PlayerThemesPage(vm: PlayerViewModel, onBack: () -> Unit) {
     val app = LocalSudo.current
+    val s = vm.settings
+    val art by rememberPreviewArt(vm)
+    val btn = playerButtons(s)
+    val title = vm.current?.title ?: "Midnight Drive"
+    val artist = vm.current?.artist ?: "SUDOSOC"
     Column(Modifier.fillMaxSize()) {
         SubHeader("Player themes", onBack)
-        Text("Only changes the Now Playing page. \"Classic\" follows your app theme.", color = app.text.copy(alpha = 0.62f),
+        Text("Each card is the real player page in that theme. \"Classic\" follows your app theme.", color = app.text.copy(alpha = 0.62f),
             style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp))
-        LazyVerticalGrid(GridCells.Fixed(2), contentPadding = PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(PlayerThemes.all, key = { it.id }) { pt -> PlayerThemeCard(pt, app, vm.settings.playerTheme.value == pt.id) { vm.settings.playerTheme.set(pt.id) } }
+        LazyVerticalGrid(GridCells.Fixed(2), contentPadding = PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            items(PlayerThemes.all, key = { it.id }) { pt ->
+                val selected = s.playerTheme.value == pt.id
+                val eff = effectiveTheme(app, pt)
+                Column(Modifier.clickable { s.playerTheme.set(pt.id) }) {
+                    Box {
+                        PlayerMock(pt, art, btn, s.seekStyle.value, title, artist, Modifier.fillMaxWidth().border(if (selected) 3.dp else 1.dp, if (selected) eff.primary else app.text.copy(alpha = 0.15f), RoundedCornerShape(24.dp)))
+                        if (selected) Icon(I.CheckCircle, null, tint = eff.primary, modifier = Modifier.align(Alignment.TopEnd).padding(10.dp).size(26.dp))
+                    }
+                    Text(pt.name, color = if (selected) app.primary else app.text, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp, top = 6.dp))
+                }
+            }
         }
     }
 }
 
+// ---------------------------------------------------------------- seek bar / icons / buttons
 @Composable
-private fun PlayerThemeCard(pt: PlayerTheme, app: AppTheme, selected: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(22.dp)
-    val accent = pt.accent ?: app.primary
-    val accent2 = pt.accent2 ?: app.secondary
-    val text = pt.text ?: app.text
-    val bg = when (pt.bg) {
-        PBg.App -> Brush.verticalGradient(listOf(app.bgTop, app.bgBottom))
-        PBg.Gradient, PBg.Blobs -> Brush.verticalGradient(if (pt.colors.size >= 2) pt.colors else listOf(app.bgTop, app.bgBottom))
-        PBg.ArtBlur, PBg.ArtGradient, PBg.FullBleed -> Brush.verticalGradient(listOf(Color(0xFF6B3FA0), Color(0xFF1B1030)))
-    }
-    Box(
-        Modifier.fillMaxWidth().aspectRatio(0.7f).clip(shape).background(bg)
-            .border(if (selected) 3.dp else 1.dp, if (selected) accent else Color.White.copy(alpha = 0.15f), shape)
-            .clickable(onClick = onClick),
-    ) {
-        Column(Modifier.fillMaxSize().padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Spacer(Modifier.height(6.dp))
-            val artShape = when (pt.shape) {
-                PShape.Circle -> CircleShape
-                PShape.Squircle -> RoundedCornerShape(30)
-                PShape.Poster -> RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp, bottomStart = 28.dp, bottomEnd = 28.dp)
-                PShape.Polaroid -> RoundedCornerShape(3.dp)
-                else -> RoundedCornerShape(14.dp)
-            }
-            val sample = Modifier.fillMaxWidth(if (pt.shape == PShape.Poster) 0.9f else 0.6f).aspectRatio(1f)
-            Box(
-                sample.then(if (pt.glow) Modifier.border(2.dp, accent, artShape) else Modifier)
-                    .clip(artShape).background(Brush.linearGradient(listOf(accent, accent2))),
+private fun SeekStylesPage(vm: PlayerViewModel, onBack: () -> Unit) {
+    val t = LocalSudo.current
+    val s = vm.settings
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        SubHeader("Seek bar style", onBack)
+        SeekStyles.forEach { (id, name) ->
+            val on = s.seekStyle.value == id
+            Column(
+                Modifier.padding(horizontal = 16.dp, vertical = 5.dp).fillMaxWidth().sudoPanel(RoundedCornerShape(20.dp))
+                    .then(if (on) Modifier.border(2.dp, t.primary, RoundedCornerShape(20.dp)) else Modifier)
+                    .clickable { s.seekStyle.set(id); vm.haptics.click() }.padding(horizontal = 16.dp, vertical = 10.dp),
             ) {
-                if (pt.spin) Box(Modifier.size(10.dp).align(Alignment.Center).clip(CircleShape).background(Color.Black.copy(alpha = 0.7f)))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, Modifier.weight(1f), color = if (on) t.primary else t.text, fontWeight = FontWeight.SemiBold)
+                    if (on) Icon(I.CheckCircle, null, tint = t.primary)
+                }
+                SeekBar(id, 0.42f, {}, {}, seed = 11L, interactive = false, animated = true)
             }
-            Spacer(Modifier.height(10.dp))
-            Box(Modifier.width(54.dp).height(5.dp).clip(RoundedCornerShape(3.dp)).background(text.copy(alpha = 0.85f)))
-            Spacer(Modifier.height(4.dp))
-            Box(Modifier.width(34.dp).height(4.dp).clip(RoundedCornerShape(3.dp)).background(text.copy(alpha = 0.45f)))
-            Spacer(Modifier.weight(1f))
-            val btn = Modifier.size(26.dp).clip(CircleShape)
-            when (pt.controls) {
-                PControls.Gradient -> Box(btn.background(Brush.linearGradient(listOf(accent, accent2))))
-                PControls.Outline -> Box(btn.border(2.dp, accent, CircleShape))
-                PControls.Plain -> Box(btn.background(text.copy(alpha = 0.85f)))
-            }
-            Spacer(Modifier.height(18.dp))
         }
-        Text(pt.name, color = text, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.align(Alignment.BottomStart).padding(12.dp))
-        if (selected) Icon(Icons.Rounded.CheckCircle, null, tint = accent, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp))
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun IconStylesPage(vm: PlayerViewModel, onBack: () -> Unit) {
+    val t = LocalSudo.current
+    val s = vm.settings
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        SubHeader("Icon style", onBack)
+        Text("Applies to every icon in the app, including the player.", color = t.text.copy(alpha = 0.62f), style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp))
+        IconStyle.entries.forEach { st ->
+            val on = s.iconStyle.value == st.name
+            Column(
+                Modifier.padding(horizontal = 16.dp, vertical = 5.dp).fillMaxWidth().sudoPanel(RoundedCornerShape(20.dp))
+                    .then(if (on) Modifier.border(2.dp, t.primary, RoundedCornerShape(20.dp)) else Modifier)
+                    .clickable { s.iconStyle.set(st.name); vm.haptics.click() }.padding(16.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(st.label, Modifier.weight(1f), color = if (on) t.primary else t.text, fontWeight = FontWeight.SemiBold)
+                    if (on) Icon(I.CheckCircle, null, tint = t.primary)
+                }
+                Spacer(Modifier.height(10.dp))
+                CompositionLocalProvider(LocalIconStyle provides st) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        listOf(I.PlayArrow, I.SkipNext, I.Shuffle, I.Repeat, I.FavoriteBorder, I.QueueMusic, I.Equalizer, I.Bedtime).forEach {
+                            Icon(it, null, tint = t.text, modifier = Modifier.size(26.dp))
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun PlayerButtonsPage(vm: PlayerViewModel, onBack: () -> Unit) {
+    val s = vm.settings
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        SubHeader("Player buttons", onBack)
+        Text("Hide what you don't use. Play / pause always stays.", color = LocalSudo.current.text.copy(alpha = 0.62f), style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp))
+        SectionLabel("Top bar")
+        SwitchRow("Lyrics", null, s.btnLyrics.value) { s.btnLyrics.set(it) }
+        SwitchRow("Queue", null, s.btnQueue.value) { s.btnQueue.set(it) }
+        SectionLabel("Next to the title")
+        SwitchRow("Favorite", null, s.btnFav.value) { s.btnFav.set(it) }
+        SwitchRow("Add to playlist", null, s.btnPlaylist.value) { s.btnPlaylist.set(it) }
+        SectionLabel("Transport")
+        SwitchRow("Shuffle", null, s.btnShuffle.value) { s.btnShuffle.set(it) }
+        SwitchRow("Previous", null, s.btnPrev.value) { s.btnPrev.set(it) }
+        SwitchRow("Next", null, s.btnNext.value) { s.btnNext.set(it) }
+        SwitchRow("Repeat", null, s.btnRepeat.value) { s.btnRepeat.set(it) }
+        SectionLabel("Bottom chips")
+        SwitchRow("Speed", "Tap on/off, hold and slide to choose", s.btnSpeed.value) { s.btnSpeed.set(it) }
+        SwitchRow("EQ", "Tap on/off, hold to open the studio", s.btnEq.value) { s.btnEq.set(it) }
+        SwitchRow("Sleep timer", "Tap on/off, hold and slide to choose", s.btnSleep.value) { s.btnSleep.set(it) }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
 // ---------------------------------------------------------------- extras
 @Composable
-private fun ExtrasPage(vm: PlayerViewModel, onEq: () -> Unit, onBack: () -> Unit) {
+private fun ExtrasPage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack: () -> Unit) {
     val t = LocalSudo.current
+    val s = vm.settings
     val ctx = LocalContext.current
     var covers by remember { mutableIntStateOf(CoverStore.count(ctx)) }
+    var minDur by remember { mutableFloatStateOf(s.minDurationSec.value.toFloat()) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         SubHeader("Extras", onBack)
-        NavRow(Icons.Rounded.Equalizer, "Equalizer & effects", if (vm.eqEnabled) "On" else "Off") { onEq() }
 
+        SectionLabel("Library")
+        SliderRow(
+            "Ignore short tracks", if (minDur.toInt() == 0) "Show everything" else "Shorter than ${minDur.toInt()}s", minDur, 0f..120f, steps = 23,
+            onDone = { s.minDurationSec.set(minDur.toInt()); vm.refreshLibrary() },
+        ) { minDur = (it / 5).toInt() * 5f }
+        NavRow(I.Folder, "Hidden folders", "${vm.hiddenFolders().size} hidden • WhatsApp audio, recordings…") { onOpen("hidden_folders") }
+        RowCard(onClick = { vm.refreshLibrary() }) {
+            Icon(I.RestartAlt, null, tint = t.primary)
+            Spacer(Modifier.width(12.dp))
+            TitleSub("Rescan library", "${vm.rawSongs.size} tracks found • new files are picked up automatically", Modifier.weight(1f))
+        }
+
+        SectionLabel("Lyrics")
         val canLrc = Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()
-        NavRow(Icons.Rounded.Lyrics, "Lyrics from .lrc files", if (canLrc) "Enabled" else "Tap to allow all-files access") {
+        NavRow(I.Lyrics, "Lyrics from .lrc files", if (canLrc) "Enabled" else "Tap to allow all-files access") {
             if (!canLrc) ctx.startActivity(
                 Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${ctx.packageName}"))
             )
         }
-
-        SectionLabel("Sleep timer")
-        RowCard {
-            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(5, 15, 30, 60).forEach { m ->
-                    PillButton("${m}m", Icons.Rounded.Bedtime) { vm.setSleep(m) }
-                }
-            }
-        }
-        RowCard(onClick = { vm.setSleep(0) }) { TitleSub("Cancel sleep timer", null, Modifier.weight(1f)) }
 
         SectionLabel("Covers")
         RowCard {
             TitleSub("Custom covers", "$covers saved • long-press the cover in the player to change one", Modifier.weight(1f))
         }
         RowCard(onClick = { CoverStore.clearAll(ctx); covers = 0 }) {
-            Icon(Icons.Rounded.Delete, null, tint = t.primary)
+            Icon(I.Delete, null, tint = t.primary)
             Spacer(Modifier.width(12.dp))
             TitleSub("Reset all custom covers", null, Modifier.weight(1f))
         }
@@ -335,10 +401,35 @@ private fun ExtrasPage(vm: PlayerViewModel, onEq: () -> Unit, onBack: () -> Unit
     }
 }
 
+@Composable
+private fun HiddenFoldersPage(vm: PlayerViewModel, onBack: () -> Unit) {
+    val t = LocalSudo.current
+    val hidden = vm.hiddenFolders()
+    val folders = remember(vm.rawSongs) {
+        vm.rawSongs.groupBy { it.folder }.map { (f, l) -> f to l.size }.sortedBy { it.first.lowercase() }
+    }
+    Column(Modifier.fillMaxSize()) {
+        SubHeader("Hidden folders", onBack)
+        Text("Songs in a folder you switch off disappear from the library.", color = t.text.copy(alpha = 0.62f), style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp))
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            items(folders.size, key = { folders[it].first }) { i ->
+                val (f, n) = folders[i]
+                val visible = f !in hidden
+                RowCard(onClick = { vm.setFolderHidden(f, visible) }) {
+                    TitleSub(f.trimEnd('/').substringAfterLast('/').ifEmpty { "(root)" }, "$n tracks • ${f.trimEnd('/')}", Modifier.weight(1f))
+                    Switch(visible, { vm.setFolderHidden(f, !it) })
+                }
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------- properties
 @Composable
 private fun PropertiesPage(vm: PlayerViewModel, onBack: () -> Unit) {
     val s = vm.settings
+    val t = LocalSudo.current
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         SubHeader("Properties", onBack)
         SectionLabel("Player gestures")
@@ -349,8 +440,34 @@ private fun PropertiesPage(vm: PlayerViewModel, onBack: () -> Unit) {
         SliderRow(
             "Seek sensitivity", "${s.scrubSeconds.value}s per full swipe", s.scrubSeconds.value.toFloat(), 30f..300f, steps = 8,
         ) { s.scrubSeconds.set((it / 15).toInt() * 15) }
-        SectionLabel("Feedback")
-        SwitchRow("Haptic feedback", "Short vibration on long-press and gestures", s.haptics.value) { s.haptics.set(it) }
+
+        SectionLabel("Vibration")
+        RowCard {
+            Column(Modifier.weight(1f)) {
+                Text("Haptic strength", color = t.text, fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (vm.haptics.available) "Real vibration for taps, gestures and sliders" else "No vibration motor found on this device",
+                    color = t.text.copy(alpha = 0.62f), style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("Off", "Light", "Medium", "Strong").forEachIndexed { i, label ->
+                        val on = s.hapticLevel.value == i
+                        Text(
+                            label, color = if (on) t.onAccent else t.text, fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                            modifier = Modifier.clip(RoundedCornerShape(50))
+                                .then(if (on) Modifier.background(Brush.horizontalGradient(listOf(t.primary, t.secondary))) else Modifier.border(1.dp, t.text.copy(alpha = 0.25f), RoundedCornerShape(50)))
+                                .clickable { s.hapticLevel.set(i); if (i > 0) vm.haptics.test(i) }.padding(horizontal = 14.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+            }
+        }
+        RowCard(onClick = { vm.haptics.test(s.hapticLevel.value.coerceAtLeast(1)) }) {
+            Icon(I.Whatshot, null, tint = t.primary)
+            Spacer(Modifier.width(12.dp))
+            TitleSub("Test vibration", "Plays one tap at the selected strength", Modifier.weight(1f))
+        }
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -368,7 +485,7 @@ private fun FeaturesPage(vm: PlayerViewModel, onBack: () -> Unit) {
         SectionLabel("Library")
         SwitchRow("Count plays", "Feeds Recently played / Most played / Never played", s.countPlays.value) { s.countPlays.set(it) }
         RowCard(onClick = { vm.clearHistory() }) {
-            Icon(Icons.Rounded.DeleteSweep, null, tint = t.primary)
+            Icon(I.DeleteSweep, null, tint = t.primary)
             Spacer(Modifier.width(12.dp))
             TitleSub("Clear play history", "Resets play counts and the recent list", Modifier.weight(1f))
         }

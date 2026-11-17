@@ -81,10 +81,10 @@ fun SongsTab(vm: PlayerViewModel) {
         ScreenTitle("Songs")
         SearchField(query) { query = it }
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            PillButton("Shuffle", Icons.Rounded.Shuffle, filled = true) { vm.shufflePlay(list) }
+            PillButton("Shuffle", I.Shuffle, filled = true) { vm.shufflePlay(list) }
             Box {
-                PillButton(sortNames[sort], Icons.Rounded.SwapVert) { sortMenu = true }
-                DropdownMenu(sortMenu, { sortMenu = false }) {
+                PillButton(sortNames[sort], I.SwapVert) { sortMenu = true }
+                SudoMenu(sortMenu, { sortMenu = false }) {
                     sortNames.forEachIndexed { i, n -> DropdownMenuItem(text = { Text(n) }, onClick = { sort = i; sortMenu = false }) }
                 }
             }
@@ -106,8 +106,8 @@ fun SearchField(value: String, onChange: (String) -> Unit) {
     TextField(
         value = value, onValueChange = onChange, singleLine = true,
         placeholder = { Text("Search songs, artists, albums", color = t.text.copy(alpha = 0.5f)) },
-        leadingIcon = { Icon(Icons.Rounded.Search, null, tint = t.text.copy(alpha = 0.7f)) },
-        trailingIcon = { if (value.isNotEmpty()) IconButton({ onChange("") }) { Icon(Icons.Rounded.Close, null, tint = t.text.copy(alpha = 0.7f)) } },
+        leadingIcon = { Icon(I.Search, null, tint = t.text.copy(alpha = 0.7f)) },
+        trailingIcon = { if (value.isNotEmpty()) IconButton({ onChange("") }) { Icon(I.Close, null, tint = t.text.copy(alpha = 0.7f)) } },
         shape = shape,
         colors = TextFieldDefaults.colors(
             focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
@@ -153,8 +153,8 @@ fun BrowseTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         ScreenTitle("Browse")
         Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PillButton("Artists", Icons.Rounded.Person, filled = mode == 0) { mode = 0 }
-            PillButton("Folders", Icons.Rounded.Folder, filled = mode == 1) { mode = 1 }
+            PillButton("Artists", I.Person, filled = mode == 0) { mode = 0 }
+            PillButton("Folders", I.Folder, filled = mode == 1) { mode = 1 }
         }
         if (mode == 0) ArtistList(vm, onOpen) else FolderList(vm, onOpen)
     }
@@ -169,7 +169,7 @@ private fun FolderList(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
         items(folders, key = { it.first }) { (path, songs) ->
             Row(Modifier.fillMaxWidth().clickable { onOpen(Detail.Folder(path)) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(50.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(t.primary.copy(alpha = 0.8f), t.secondary.copy(alpha = 0.8f)))), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Folder, null, tint = t.onAccent)
+                    Icon(I.Folder, null, tint = t.onAccent)
                 }
                 Spacer(Modifier.width(14.dp))
                 Column {
@@ -209,14 +209,14 @@ fun PlaylistsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
     var creating by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         ScreenTitle("Playlists")
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { PillButton("New playlist", Icons.Rounded.Add, filled = true) { creating = true } }
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { PillButton("New playlist", I.Add, filled = true) { creating = true } }
         LazyColumn(Modifier.padding(top = 6.dp)) {
             items(Smart.entries.toList(), key = { "smart_" + it.name }) { k ->
                 val icon = when (k) {
-                    Smart.Recent -> Icons.Rounded.History
-                    Smart.Most -> Icons.Rounded.Whatshot
-                    Smart.Added -> Icons.Rounded.NewReleases
-                    Smart.Unplayed -> Icons.Rounded.Explore
+                    Smart.Recent -> I.History
+                    Smart.Most -> I.Whatshot
+                    Smart.Added -> I.NewReleases
+                    Smart.Unplayed -> I.Explore
                 }
                 Row(Modifier.fillMaxWidth().clickable { onOpen(Detail.SmartList(k)) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(54.dp).clip(RoundedCornerShape(14.dp)).sudoPanel(RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
@@ -234,7 +234,7 @@ fun PlaylistsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
                 Row(Modifier.fillMaxWidth().clickable { onOpen(Detail.Pl(p.id)) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     val first = remember(p.songIds, vm.songs) { vm.songs.firstOrNull { it.id in p.songIds } }
                     if (p.id == FAV_ID) Box(Modifier.size(54.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(t.primary, t.secondary))), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.Favorite, null, tint = t.onAccent)
+                        Icon(I.Favorite, null, tint = t.onAccent)
                     } else Artwork(first, Modifier.size(54.dp), 128, 14.dp)
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
@@ -242,8 +242,8 @@ fun PlaylistsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
                         Text("${p.songIds.size} songs", color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
                     }
                     if (p.id != FAV_ID) Box {
-                        IconButton({ menu = true }) { Icon(Icons.Rounded.MoreVert, null, tint = t.text.copy(alpha = 0.7f)) }
-                        DropdownMenu(menu, { menu = false }) { DropdownMenuItem(text = { Text("Delete") }, onClick = { vm.store.delete(p.id); menu = false }) }
+                        IconButton({ menu = true }) { Icon(I.MoreVert, null, tint = t.text.copy(alpha = 0.7f)) }
+                        SudoMenu(menu, { menu = false }) { DropdownMenuItem(text = { Text("Delete") }, onClick = { vm.store.delete(p.id); menu = false }) }
                     }
                 }
             }
@@ -253,12 +253,12 @@ fun PlaylistsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
 }
 
 @Composable
-fun NameDialog(title: String, onDismiss: () -> Unit, onOk: (String) -> Unit) {
+fun NameDialog(title: String, onDismiss: () -> Unit, confirm: String = "Create", onOk: (String) -> Unit) {
     var name by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss, title = { Text(title) },
         text = { OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("Name") }) },
-        confirmButton = { TextButton({ onOk(name) }) { Text("Create") } },
+        confirmButton = { TextButton({ onOk(name) }) { Text(confirm) } },
         dismissButton = { TextButton(onDismiss) { Text("Cancel") } },
     )
 }
@@ -278,7 +278,7 @@ fun PlaylistPickerDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit)
                     val has = song.id in p.songIds
                     Row(Modifier.fillMaxWidth().clickable { vm.store.addSong(p.id, song.id); onDismiss() }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(p.name, Modifier.weight(1f))
-                        if (has) Icon(Icons.Rounded.Check, null)
+                        if (has) Icon(I.Check, null)
                     }
                 }
             }
@@ -304,12 +304,12 @@ fun DetailScreen(vm: PlayerViewModel, detail: Detail, onBack: () -> Unit) {
     }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.padding(top = 6.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = t.text) }
+            IconButton(onBack) { Icon(I.ArrowBack, null, tint = t.text) }
             Text(title, color = t.text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PillButton("Play", Icons.Rounded.PlayArrow, filled = true) { vm.play(list, 0, false) }
-            PillButton("Shuffle", Icons.Rounded.Shuffle) { vm.shufflePlay(list) }
+            PillButton("Play", I.PlayArrow, filled = true) { vm.play(list, 0, false) }
+            PillButton("Shuffle", I.Shuffle) { vm.shufflePlay(list) }
         }
         if (list.isEmpty()) EmptyState("Nothing here yet")
         LazyColumn {

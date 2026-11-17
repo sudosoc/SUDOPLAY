@@ -3,7 +3,11 @@ package com.sudosoc.sudoplay
 import android.app.Application
 import android.content.ComponentName
 import android.content.Context
+import android.database.ContentObserver
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -23,6 +27,10 @@ import com.google.common.util.concurrent.MoreExecutors
 import com.sudosoc.sudoplay.data.AppSettings
 import com.sudosoc.sudoplay.data.CoverStore
 import com.sudosoc.sudoplay.data.EqPresets
+import com.sudosoc.sudoplay.data.FxScene
+import com.sudosoc.sudoplay.data.FxScenes
+import com.sudosoc.sudoplay.data.FxState
+import com.sudosoc.sudoplay.data.Haptics
 import com.sudosoc.sudoplay.data.Lyrics
 import com.sudosoc.sudoplay.data.LyricsLoader
 import com.sudosoc.sudoplay.data.MusicRepository
@@ -31,6 +39,7 @@ import com.sudosoc.sudoplay.data.Smart
 import com.sudosoc.sudoplay.data.Song
 import com.sudosoc.sudoplay.playback.PlaybackService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -43,14 +52,19 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = ctx.getSharedPreferences("sudoplay", Context.MODE_PRIVATE)
     val store = PlaylistStore(ctx)
 
-    // ---- library ----
-    var songs by mutableStateOf<List<Song>>(emptyList()); private set
-    var loading by mutableStateOf(false); private set
-    private var byId: Map<Long, Song> = emptyMap()
-
     // ---- settings / theme ----
     val settings = AppSettings(prefs)
     val themeId: String get() = settings.theme.value
+    val haptics = Haptics(ctx) { settings.hapticLevel.value }
+
+    // ---- library ----
+    /** Everything MediaStore returned (before hidden folders are applied). */
+    var rawSongs by mutableStateOf<List<Song>>(emptyList()); private set
+    var songs by mutableStateOf<List<Song>>(emptyList()); private set
+    var loading by mutableStateOf(false); private set
+    private var byId: Map<Long, Song> = emptyMap()
+    private var refreshJob: Job? = null
+    private var restored = false
 
     // ---- playback state ----
     var current by mutableStateOf<Song?>(null); private set
@@ -63,6 +77,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     var queue by mutableStateOf<List<Song>>(emptyList()); private set
     var queueIndex by mutableIntStateOf(0); private set
     var sleepEndsAt by mutableLongStateOf(0L); private set
+    var sleepEndOfSong by mutableStateOf(false); private set
+    private var sleepSongId = -1L
 
     // ---- lyrics ----
     var lyrics by mutableStateOf<Lyrics?>(null); private set
@@ -75,24 +91,25 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     ); private set
     private var lastCounted = -1L
 
-    // ---- equalizer ----
+    // ---- sound engine ----
+    var fx by mutableStateOf(FxState.load(prefs)); private set
+    var userScenes by mutableStateOf(FxScenes.loadUser(prefs)); private set
     var eqBands by mutableIntStateOf(0); private set
     var eqMin by mutableIntStateOf(-1500); private set
     var eqMax by mutableIntStateOf(1500); private set
     var eqFreqs by mutableStateOf<List<Int>>(emptyList()); private set
-    var eqEnabled by mutableStateOf(prefs.getBoolean("eq_on", false)); private set
-    var eqLevels by mutableStateOf(
-        (prefs.getString("eq_levels", "") ?: "").split(",").mapNotNull { it.toIntOrNull() }
-    ); private set
-    var eqPreset by mutableStateOf(prefs.getString("eq_preset", "") ?: ""); private set
-    var bass by mutableIntStateOf(prefs.getInt("eq_bass", 0)); private set
-    var virt by mutableIntStateOf(prefs.getInt("eq_virt", 0)); private set
-    var loud by mutableIntStateOf(prefs.getInt("eq_loud", 0)); private set
 
     // ---- UI helpers ----
     var playlistTarget by mutableStateOf<Song?>(null)
 
     private var controller: MediaController? = null
+
+    private val mediaObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            refreshJob?.cancel()
+            refreshJob = viewModelScope.launch { delay(1500); refreshLibrary() }
+        }
+    }
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = sync()
@@ -105,30 +122,78 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { future.get() }.getOrNull()?.let {
                 controller = it
                 it.addListener(listener)
+                if (it.mediaItemCount > 0) restored = true
                 sync()
                 loadEqInfo()
+                tryRestore()
             }
         }, MoreExecutors.directExecutor())
 
         viewModelScope.launch {
+            var tick = 0
             while (isActive) {
                 delay(400)
                 controller?.let { if (it.isPlaying) position = it.currentPosition }
                 if (sleepEndsAt != 0L && System.currentTimeMillis() > sleepEndsAt) sleepEndsAt = 0L
+                if (++tick % 10 == 0) saveQueue()
             }
         }
+
+        // pick up new / deleted music without a manual refresh
+        ctx.contentResolver.registerContentObserver(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, mediaObserver)
     }
+
 
     fun refreshLibrary() {
         viewModelScope.launch {
             loading = true
-            val list = withContext(Dispatchers.IO) { runCatching { repo.loadSongs() }.getOrDefault(emptyList()) }
-            songs = list
-            byId = list.associateBy { it.id }
+            val minDur = settings.minDurationSec.value
+            val list = withContext(Dispatchers.IO) { runCatching { repo.loadSongs(minDur) }.getOrDefault(emptyList()) }
+            rawSongs = list
             CoverStore.registerSongs(list)
+            applyLibraryFilters()
             loading = false
             sync()
+            tryRestore()
         }
+    }
+
+    fun hiddenFolders(): Set<String> =
+        settings.hiddenFolders.value.split("\n").filter { it.isNotEmpty() }.toSet()
+
+    fun setFolderHidden(folder: String, hidden: Boolean) {
+        val set = hiddenFolders().toMutableSet()
+        if (hidden) set.add(folder) else set.remove(folder)
+        settings.hiddenFolders.set(set.joinToString("\n"))
+        applyLibraryFilters()
+    }
+
+    private fun applyLibraryFilters() {
+        val hid = hiddenFolders()
+        val list = if (hid.isEmpty()) rawSongs else rawSongs.filter { it.folder !in hid }
+        songs = list
+        byId = rawSongs.associateBy { it.id }   // a hidden song that is already queued can still resolve
+    }
+
+    // ---- remember the queue between launches ----
+    private fun saveQueue() {
+        val c = controller ?: return
+        if (c.mediaItemCount == 0) return
+        val ids = (0 until c.mediaItemCount).joinToString(",") { c.getMediaItemAt(it).mediaId }
+        prefs.edit().putString("q_ids", ids).putInt("q_idx", c.currentMediaItemIndex).putLong("q_pos", c.currentPosition).apply()
+    }
+
+    private fun tryRestore() {
+        val c = controller ?: return
+        if (restored || byId.isEmpty()) return
+        restored = true
+        if (c.mediaItemCount > 0) return
+        val ids = (prefs.getString("q_ids", "") ?: "").split(",").mapNotNull { it.toLongOrNull() }
+        val items = ids.mapNotNull { byId[it] }.map(::toItem)
+        if (items.isEmpty()) return
+        val idx = prefs.getInt("q_idx", 0).coerceIn(0, items.lastIndex)
+        c.setMediaItems(items, idx, prefs.getLong("q_pos", 0L))
+        c.prepare()   // paused: the user taps play when ready
     }
 
     private fun sync() {
@@ -144,6 +209,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         position = c.currentPosition
 
         val cur = current
+        if (sleepEndOfSong && cur?.id != sleepSongId) sleepEndOfSong = false
         if (cur != null && cur.id != lyricsFor) {
             lyricsFor = cur.id
             lyrics = null
@@ -175,7 +241,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().remove("plays").remove("recent").apply()
     }
 
-    // ---- equalizer ----
+    // ---- sound engine ----
     private fun loadEqInfo() {
         val c = controller ?: return
         val f = c.sendCustomCommand(SessionCommand(PlaybackService.CMD_EQ_INFO, Bundle.EMPTY), Bundle.EMPTY)
@@ -186,40 +252,56 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     eqMin = b.getInt(PlaybackService.KEY_MINLVL)
                     eqMax = b.getInt(PlaybackService.KEY_MAXLVL)
                     eqFreqs = b.getIntArray(PlaybackService.KEY_FREQS)?.toList() ?: emptyList()
-                    if (eqLevels.size != eqBands) eqLevels = List(eqBands) { 0 }
+                    if (fx.levels.size != eqBands) fx = fx.copy(levels = List(eqBands) { 0 })
                 }
-                applyEq()
+                sendFx()
             }
         }, MoreExecutors.directExecutor())
     }
 
-    private fun applyEq() {
-        prefs.edit()
-            .putBoolean("eq_on", eqEnabled).putString("eq_levels", eqLevels.joinToString(","))
-            .putString("eq_preset", eqPreset).putInt("eq_bass", bass).putInt("eq_virt", virt).putInt("eq_loud", loud)
-            .apply()
+    private fun sendFx() {
         controller?.sendCustomCommand(
             SessionCommand(PlaybackService.CMD_EQ_SET, Bundle.EMPTY),
-            bundleOf(
-                PlaybackService.KEY_ON to eqEnabled, PlaybackService.KEY_LEVELS to eqLevels.toIntArray(),
-                PlaybackService.KEY_BASS to bass, PlaybackService.KEY_VIRT to virt, PlaybackService.KEY_LOUD to loud,
-            ),
+            bundleOf(PlaybackService.KEY_FX to fx.toJson()),
         )
     }
 
-    fun toggleEq(on: Boolean) { eqEnabled = on; applyEq() }
-    fun setEqLevel(i: Int, v: Int) {
-        eqLevels = eqLevels.toMutableList().also { if (i in it.indices) it[i] = v }
-        eqPreset = ""; applyEq()
+    /** Update the sound settings live. Pass save = false while dragging and call [fxSave] when the finger lifts. */
+    fun fxEdit(save: Boolean = true, f: (FxState) -> FxState) {
+        fx = f(fx)
+        sendFx()
+        if (save) fxSave()
     }
-    fun applyPreset(name: String) {
+
+    fun fxSave() { prefs.edit().putString("fx", fx.toJson()).apply() }
+    fun toggleFx() { fxEdit { it.copy(enabled = !it.enabled) }; haptics.click() }
+
+    fun setEqLevel(i: Int, v: Int) = fxEdit(save = false) { st ->
+        st.copy(levels = st.levels.toMutableList().also { if (i in it.indices) it[i] = v }, preset = "")
+    }
+
+    fun applyCurve(name: String) {
         if (eqBands == 0) return
-        eqLevels = EqPresets.levels(name, eqBands, eqMax)
-        eqPreset = name; eqEnabled = true; applyEq()
+        fxEdit { it.copy(enabled = true, levels = EqPresets.levels(name, eqBands, eqMax), preset = name) }
     }
-    fun changeBass(v: Int) { bass = v; applyEq() }
-    fun changeVirt(v: Int) { virt = v; applyEq() }
-    fun changeLoud(v: Int) { loud = v; applyEq() }
+
+    fun applyScene(scene: FxScene) = fxEdit { FxScenes.apply(scene, eqBands.coerceAtLeast(5), eqMax) }
+    fun applyUserScene(name: String, st: FxState) = fxEdit {
+        st.copy(enabled = true, levels = if (st.levels.size == eqBands) st.levels else it.levels, preset = name)
+    }
+
+    fun resetFx() = fxEdit { FxState(enabled = it.enabled, levels = List(eqBands) { 0 }) }
+
+    fun saveScene(name: String) {
+        val n = name.trim().ifEmpty { return }
+        userScenes = userScenes.filter { it.first != n } + (n to fx.copy(preset = n))
+        FxScenes.saveUser(prefs, userScenes)
+    }
+
+    fun deleteScene(name: String) {
+        userScenes = userScenes.filter { it.first != name }
+        FxScenes.saveUser(prefs, userScenes)
+    }
 
     private fun toItem(s: Song): MediaItem = MediaItem.Builder()
         .setMediaId(s.id.toString())
@@ -262,7 +344,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
-    fun changeSpeed(s: Float) { controller?.setPlaybackSpeed(s) }
 
     fun playNext(song: Song) {
         val c = controller ?: return
@@ -284,6 +365,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         setSleep((remainMin + extra).toInt())
     }
 
+    /** minutes > 0: pause after that long; 0: cancel; -1: pause when the current song ends. */
     fun setSleep(minutes: Int) {
         val c = controller ?: return
         c.sendCustomCommand(
@@ -291,9 +373,19 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             bundleOf(PlaybackService.KEY_MIN to minutes),
         )
         sleepEndsAt = if (minutes > 0) System.currentTimeMillis() + minutes * 60_000L else 0L
+        sleepEndOfSong = minutes < 0
+        sleepSongId = current?.id ?: -1L
+        if (minutes > 0) settings.lastSleepMin.set(minutes)
+    }
+
+    fun changeSpeedTo(s: Float) {
+        controller?.setPlaybackSpeed(s)
+        if (s != 1f) settings.lastSpeedPct.set((s * 100).toInt())
     }
 
     override fun onCleared() {
+        saveQueue()
+        ctx.contentResolver.unregisterContentObserver(mediaObserver)
         controller?.removeListener(listener)
         controller?.release()
         super.onCleared()

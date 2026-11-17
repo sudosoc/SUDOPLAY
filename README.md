@@ -31,3 +31,12 @@ Android music player — Kotlin, Jetpack Compose, Media3 (ExoPlayer).
 
 ## Build
 `./gradlew assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`
+
+## v0.4
+
+- **Sound studio**: tap the EQ chip to switch the whole sound engine on/off, long-press it to open the studio. Live spectrum of what is playing with a draggable EQ curve, 10 scenes + your own saved scenes, preamp / bass / loudness, virtual surround (auto / headphones / speakers), stereo width, reverb (room / damping / mix) and echo (delay / feedback / mix). Width, reverb and echo run in a built-in DSP processor, so they sound the same on every phone.
+- **Player page**: drag down to close (follows the finger), drag the mini player up to open it, swipe the mini player sideways for next / previous. Rubber-band stretch while swiping or scrubbing, themed gesture badge.
+- **Speed & Sleep chips**: tap = on/off, hold and slide = pick a value from a wide range, hold and release = menu. Sleep has "End of song".
+- **Appearance**: 37 player themes shown as live previews of the real page, 13 seek-bar styles, 5 icon families, choose which player buttons are visible. Popup menus share one themed look.
+- **Real haptics** through the system Vibrator with adjustable strength and a test button.
+- **Extras**: minimum track length, hidden folders, rescan, .lrc access, covers reset. Library refreshes by itself; the queue and position are restored on launch.
