@@ -51,7 +51,7 @@ fun PillButton(label: String, icon: androidx.compose.ui.graphics.vector.ImageVec
     val shape = RoundedCornerShape(50)
     val base = Modifier.clip(shape)
     val m = if (filled) base.background(Brush.linearGradient(listOf(t.primary, t.secondary))) else base.sudoPanel(shape)
-    val fg = if (filled) Color.Black.copy(alpha = 0.85f) else t.text
+    val fg = if (filled) t.onAccent else t.text
     Row(m.clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, tint = fg, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(6.dp))
@@ -169,7 +169,7 @@ private fun FolderList(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
         items(folders, key = { it.first }) { (path, songs) ->
             Row(Modifier.fillMaxWidth().clickable { onOpen(Detail.Folder(path)) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(50.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(t.primary.copy(alpha = 0.8f), t.secondary.copy(alpha = 0.8f)))), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Folder, null, tint = Color.Black.copy(alpha = 0.75f))
+                    Icon(Icons.Rounded.Folder, null, tint = t.onAccent)
                 }
                 Spacer(Modifier.width(14.dp))
                 Column {
@@ -234,7 +234,7 @@ fun PlaylistsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
                 Row(Modifier.fillMaxWidth().clickable { onOpen(Detail.Pl(p.id)) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     val first = remember(p.songIds, vm.songs) { vm.songs.firstOrNull { it.id in p.songIds } }
                     if (p.id == FAV_ID) Box(Modifier.size(54.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(t.primary, t.secondary))), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.Favorite, null, tint = Color.Black.copy(alpha = 0.8f))
+                        Icon(Icons.Rounded.Favorite, null, tint = t.onAccent)
                     } else Artwork(first, Modifier.size(54.dp), 128, 14.dp)
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
@@ -319,71 +319,5 @@ fun DetailScreen(vm: PlayerViewModel, detail: Detail, onBack: () -> Unit) {
                 } else null)
             }
         }
-    }
-}
-
-// ---------------- Style / Themes ----------------
-@Composable
-fun StyleTab(vm: PlayerViewModel) {
-    val t = LocalSudo.current
-    Column(Modifier.fillMaxSize()) {
-        ScreenTitle("Style")
-        Text("Pick a look. Glass, solid and artwork-blur themes change how every surface is drawn.",
-            color = t.text.copy(alpha = 0.65f), modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp), style = MaterialTheme.typography.bodySmall)
-        val ctx = androidx.compose.ui.platform.LocalContext.current
-        if (android.os.Build.VERSION.SDK_INT >= 30 && !android.os.Environment.isExternalStorageManager()) {
-            Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                PillButton("Enable .lrc lyrics files", Icons.Rounded.Lyrics) {
-                    ctx.startActivity(
-                        android.content.Intent(
-                            android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                            android.net.Uri.parse("package:${ctx.packageName}"),
-                        )
-                    )
-                }
-            }
-        }
-        LazyVerticalGrid(GridCells.Fixed(2), contentPadding = PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(Themes.all, key = { it.id }) { th -> ThemeCard(th, selected = vm.themeId == th.id) { vm.setTheme(th.id) } }
-        }
-    }
-}
-
-@Composable
-private fun ThemeCard(th: AppTheme, selected: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(22.dp)
-    Box(
-        Modifier.fillMaxWidth().aspectRatio(0.85f).clip(shape)
-            .background(Brush.verticalGradient(listOf(th.bgTop, th.bgBottom)))
-            .border(if (selected) 3.dp else 1.dp, if (selected) th.primary else Color.White.copy(alpha = 0.15f), shape)
-            .clickable(onClick = onClick),
-    ) {
-        // blobs for glass / art preview
-        if (th.style != Style.Solid) {
-            Box(Modifier.size(90.dp).align(Alignment.TopStart).background(Brush.radialGradient(listOf(th.primary.copy(alpha = 0.45f), Color.Transparent))))
-            Box(Modifier.size(90.dp).align(Alignment.BottomEnd).background(Brush.radialGradient(listOf(th.secondary.copy(alpha = 0.45f), Color.Transparent))))
-        }
-        Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.SpaceBetween) {
-            // fake mini-player
-            val panelBg = when (th.style) {
-                Style.Solid -> th.surface
-                Style.Glass -> if (th.dark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.55f)
-                Style.Art -> if (th.dark) Color.Black.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.6f)
-            }
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(panelBg).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(24.dp).clip(RoundedCornerShape(7.dp)).background(Brush.linearGradient(listOf(th.primary, th.secondary))))
-                Spacer(Modifier.width(8.dp))
-                Column {
-                    Box(Modifier.width(44.dp).height(5.dp).clip(RoundedCornerShape(3.dp)).background(th.text.copy(alpha = 0.8f)))
-                    Spacer(Modifier.height(4.dp))
-                    Box(Modifier.width(28.dp).height(4.dp).clip(RoundedCornerShape(3.dp)).background(th.text.copy(alpha = 0.4f)))
-                }
-            }
-            Column {
-                Text(th.name, color = th.text, fontWeight = FontWeight.Bold)
-                Text(th.style.label + if (th.dynamic) " • wallpaper colors" else "", color = th.text.copy(alpha = 0.7f), style = MaterialTheme.typography.labelSmall)
-            }
-        }
-        if (selected) Icon(Icons.Rounded.CheckCircle, null, tint = th.primary, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp))
     }
 }

@@ -16,8 +16,15 @@ Android music player — Kotlin, Jetpack Compose, Media3 (ExoPlayer).
 - Smart lists driven by play stats: recently played, most played, recently added, never played
 - Gapless playback comes from ExoPlayer for files with proper gapless metadata
 
+## Done (v0.3)
+- Settings tab (Appearance / Extras / Properties / Features) replaces the Style tab
+- 68 app themes in 6 styles (Glass, Gradient, Artwork blur, Solid, Soft, Outline) + 17 player-page themes (vinyl spin, halo ring, full bleed, polaroid, card stack, neon glow, animated aurora, ...)
+- Player gestures: double-tap play/pause, swipe next/previous, long-press + drag to seek, long-press the cover to change it
+- Cover editor: 18 built-in covers or any photo from the device, pan/zoom to position, per song or whole album
+- Sleep timer shows a live countdown on its button, +5 min while running
+
 ## Roadmap
-- v0.2.x: crossfade, ReplayGain, tag editor, lyrics for FLAC/M4A
+- v0.3.x: crossfade, ReplayGain, tag editor, lyrics for FLAC/M4A
 - v0.3: streaming without API keys — NewPipeExtractor (YouTube/SoundCloud), internet radio (radio-browser), direct URLs
 - v0.4: Listen Together over LAN, smart playlists, car mode, stats, widget, Android Auto
 - More themes: just add an entry in `ui/Theme.kt`

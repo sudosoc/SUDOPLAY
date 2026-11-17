@@ -20,6 +20,8 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
+import com.sudosoc.sudoplay.data.AppSettings
+import com.sudosoc.sudoplay.data.CoverStore
 import com.sudosoc.sudoplay.data.EqPresets
 import com.sudosoc.sudoplay.data.Lyrics
 import com.sudosoc.sudoplay.data.LyricsLoader
@@ -46,8 +48,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     var loading by mutableStateOf(false); private set
     private var byId: Map<Long, Song> = emptyMap()
 
-    // ---- theme ----
-    var themeId by mutableStateOf(prefs.getString("theme", "aurora") ?: "aurora"); private set
+    // ---- settings / theme ----
+    val settings = AppSettings(prefs)
+    val themeId: String get() = settings.theme.value
 
     // ---- playback state ----
     var current by mutableStateOf<Song?>(null); private set
@@ -122,6 +125,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             val list = withContext(Dispatchers.IO) { runCatching { repo.loadSongs() }.getOrDefault(emptyList()) }
             songs = list
             byId = list.associateBy { it.id }
+            CoverStore.registerSongs(list)
             loading = false
             sync()
         }
@@ -148,7 +152,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 if (lyricsFor == cur.id) lyrics = l
             }
         }
-        if (cur != null && isPlaying && cur.id != lastCounted) {
+        if (cur != null && isPlaying && cur.id != lastCounted && settings.countPlays.value) {
             lastCounted = cur.id
             plays = plays + (cur.id to ((plays[cur.id] ?: 0) + 1))
             recent = (listOf(cur.id) + recent.filter { it != cur.id }).take(50)
@@ -164,6 +168,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         Smart.Most -> songs.filter { (plays[it.id] ?: 0) > 0 }.sortedByDescending { plays[it.id] ?: 0 }.take(100)
         Smart.Added -> songs.sortedByDescending { it.dateAdded }.take(100)
         Smart.Unplayed -> songs.filter { (plays[it.id] ?: 0) == 0 }
+    }
+
+    fun clearHistory() {
+        plays = emptyMap(); recent = emptyList(); lastCounted = -1L
+        prefs.edit().remove("plays").remove("recent").apply()
     }
 
     // ---- equalizer ----
@@ -269,6 +278,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun removeFromQueue(index: Int) { controller?.removeMediaItem(index) }
     fun jumpTo(index: Int) { controller?.let { it.seekToDefaultPosition(index); it.play() } }
 
+    /** Extend a running sleep timer by [extra] minutes. */
+    fun extendSleep(extra: Int) {
+        val remainMin = ((sleepEndsAt - System.currentTimeMillis()).coerceAtLeast(0) + 59_999) / 60_000
+        setSleep((remainMin + extra).toInt())
+    }
+
     fun setSleep(minutes: Int) {
         val c = controller ?: return
         c.sendCustomCommand(
@@ -276,12 +291,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             bundleOf(PlaybackService.KEY_MIN to minutes),
         )
         sleepEndsAt = if (minutes > 0) System.currentTimeMillis() + minutes * 60_000L else 0L
-    }
-
-    // ---- theme ----
-    fun setTheme(id: String) {
-        themeId = id
-        prefs.edit().putString("theme", id).apply()
     }
 
     override fun onCleared() {

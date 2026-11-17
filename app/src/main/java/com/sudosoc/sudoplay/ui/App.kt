@@ -28,7 +28,7 @@ private val tabs = listOf(
     Tab("Albums", Icons.Rounded.Album),
     Tab("Browse", Icons.Rounded.Folder),
     Tab("Playlists", Icons.Rounded.LibraryMusic),
-    Tab("Style", Icons.Rounded.Palette),
+    Tab("Settings", Icons.Rounded.Settings),
 )
 
 @Composable
@@ -49,7 +49,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                             1 -> AlbumsTab(vm) { detail = it }
                             2 -> BrowseTab(vm) { detail = it }
                             3 -> PlaylistsTab(vm) { detail = it }
-                            else -> StyleTab(vm)
+                            else -> SettingsTab(vm)
                         }
                     }
                 }
