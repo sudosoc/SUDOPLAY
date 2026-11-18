@@ -24,7 +24,7 @@ jobs:
         uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17' }
       - if: steps.v.outputs.new == 'true'
-        uses: android-actions/setup-android@v3
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
       - if: steps.v.outputs.new == 'true'
         run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon && cp app/build/outputs/apk/debug/app-debug.apk "SUDOPLAY-${{ steps.v.outputs.ver }}.apk"
       - if: steps.v.outputs.new == 'true'
