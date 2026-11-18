@@ -1,21 +1,37 @@
 name: Release APK
+# Publishes a GitHub Release for the versionName in app/build.gradle.kts the first time it is pushed to main
+# (no manual tag needed). Re-run from the Actions tab with "Run workflow".
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Version and whether it is new
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver=$(grep -E 'versionName *=' app/build.gradle.kts | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/v$ver" >/dev/null 2>&1; then echo "new=false" >> "$GITHUB_OUTPUT"; else echo "new=true" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.v.outputs.new == 'true'
+        uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17' }
-      - uses: gradle/actions/setup-gradle@v4
-      - run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
-      - name: Name the APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk "SUDOPLAY-${GITHUB_REF_NAME#v}.apk"
-      - uses: softprops/action-gh-release@v2
+      - if: steps.v.outputs.new == 'true'
+        uses: android-actions/setup-android@v3
+      - if: steps.v.outputs.new == 'true'
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon && cp app/build/outputs/apk/debug/app-debug.apk "SUDOPLAY-${{ steps.v.outputs.ver }}.apk"
+      - if: steps.v.outputs.new == 'true'
+        uses: softprops/action-gh-release@v2
         with:
-          files: SUDOPLAY-*.apk
+          tag_name: v${{ steps.v.outputs.ver }}
+          target_commitish: ${{ github.sha }}
+          name: SUDOPLAY ${{ steps.v.outputs.ver }}
+          files: SUDOPLAY-${{ steps.v.outputs.ver }}.apk
           generate_release_notes: true
