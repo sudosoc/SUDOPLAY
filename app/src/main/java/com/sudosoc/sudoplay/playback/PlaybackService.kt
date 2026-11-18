@@ -133,6 +133,11 @@ class PlaybackService : MediaSessionService() {
                 if (isPlaying) kick() else { xfMul = 1f; applyVolume() }
             }
             override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) { kick() }
+            override fun onEvents(player: Player, events: Player.Events) {
+                if (events.containsAny(Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_MEDIA_METADATA_CHANGED)) {
+                    com.sudosoc.sudoplay.widget.WidgetUpdater.publish(applicationContext, player)
+                }
+            }
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 // the "end of song" sleep timer is one-shot
                 if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) exo.pauseAtEndOfMediaItems = false

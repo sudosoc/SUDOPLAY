@@ -925,10 +925,19 @@ private fun LyricsView(vm: PlayerViewModel) {
     val shape = RoundedCornerShape(24.dp)
     if (l == null) {
         Box(Modifier.fillMaxSize().sudoPanel(shape), contentAlignment = Alignment.Center) {
-            Text(
-                "No lyrics found\nEmbedded in the MP3, or a .lrc file next to the song",
-                color = t.text.copy(alpha = 0.65f), textAlign = TextAlign.Center, modifier = Modifier.padding(24.dp),
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
+                Text(
+                    "No lyrics found\nEmbedded in the MP3, or a .lrc file next to the song",
+                    color = t.text.copy(alpha = 0.65f), textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    if (vm.lyricsBusy) "Searching…" else "Find lyrics online", color = t.onAccent, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Brush.horizontalGradient(listOf(t.primary, t.secondary)))
+                        .clickable(enabled = !vm.lyricsBusy) { vm.findLyricsOnline() }.padding(horizontal = 22.dp, vertical = 10.dp),
+                )
+                Text("Sends only the title, artist and length to lrclib.net", color = t.text.copy(alpha = 0.45f), fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+            }
         }
         return
     }

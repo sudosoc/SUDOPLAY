@@ -16,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -56,7 +57,7 @@ fun SettingsTab(vm: PlayerViewModel) {
             "arrange" -> "player_buttons"
             "stats" -> "features"
             "gesture_editor" -> "props"
-            "hidden_folders" -> "extras"
+            "hidden_folders", "netlog" -> "extras"
             else -> "home"
         }
     }
@@ -74,6 +75,7 @@ fun SettingsTab(vm: PlayerViewModel) {
         "stats" -> StatsPage(vm) { page = "features" }
         "extras" -> ExtrasPage(vm, onOpen = { page = it }) { page = "home" }
         "hidden_folders" -> HiddenFoldersPage(vm) { page = "extras" }
+        "netlog" -> NetLogPage { page = "extras" }
         "props" -> PropertiesPage(vm, onOpen = { page = it }) { page = "home" }
         "features" -> FeaturesPage(vm, onOpen = { page = it }) { page = "home" }
         else -> HomePage(vm) { page = it }
@@ -159,7 +161,8 @@ private fun HomePage(vm: PlayerViewModel, onOpen: (String) -> Unit) {
         BigSection(I.Palette, "Appearance", "المظهر", "App themes and player-page themes") { onOpen("appearance") }
         BigSection(I.Extension, "Extras", "الإضافات", "Library filters, hidden folders, .lrc lyrics, covers") { onOpen("extras") }
         BigSection(I.Tune, "Properties", "الخصائص", "Gestures, seek sensitivity, vibration") { onOpen("props") }
-        BigSection(I.AutoAwesome, "Features", "المميزات", "Screen, lyrics, play history") { onOpen("features") }
+        BigSection(I.AutoAwesome, "Features", "المميزات", "Sound, lyrics, play history, backup") { onOpen("features") }
+        BigSection(I.Explore, "Car mode", "وضع السيارة", "Big landscape screen for the head unit") { vm.carMode = true }
         Text("SUDOPLAY 0.5.0 • by SUDOSOC", color = t.text.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(20.dp))
     }
@@ -201,6 +204,27 @@ private fun AppearancePage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack
         SectionLabel("App")
         NavRow(I.Apps, "Navigation bar", "Pick the tabs and move it: ${s.navPos.value}") { onOpen("nav_bar") }
         SwitchRow("Colors from the cover", "The whole app takes its colors from the song that is playing", s.coverColors.value) { s.coverColors.set(it) }
+        SectionLabel("Home-screen widget")
+        val ctxW = LocalContext.current
+        RowCard {
+            Column(Modifier.weight(1f)) {
+                Text("Widget theme", color = LocalSudo.current.text, fontWeight = FontWeight.SemiBold)
+                Text("Add it from your launcher: three sizes (4×1, 4×2, 2×2) — all follow this theme", color = LocalSudo.current.text.copy(alpha = 0.62f), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    com.sudosoc.sudoplay.widget.WidgetTheme.ids.forEach { (id, label) ->
+                        val on = s.widgetTheme.value == id
+                        val tt = LocalSudo.current
+                        Text(
+                            label, color = if (on) tt.onAccent else tt.text, fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                            modifier = Modifier.clip(RoundedCornerShape(50))
+                                .then(if (on) Modifier.background(Brush.horizontalGradient(listOf(tt.primary, tt.secondary))) else Modifier.border(1.dp, tt.text.copy(alpha = 0.25f), RoundedCornerShape(50)))
+                                .clickable { s.widgetTheme.set(id); com.sudosoc.sudoplay.widget.WidgetUpdater.update(ctxW) }.padding(horizontal = 14.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+            }
+        }
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -409,6 +433,9 @@ private fun ExtrasPage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack: ()
             )
         }
 
+        SwitchRow("Download missing lyrics", "Asks lrclib.net (free, no account) when a song has none. Sends only title, artist, album and length", s.autoLyrics.value) { s.autoLyrics.set(it) }
+        NavRow(I.Search, "Network log", "${com.sudosoc.sudoplay.data.NetLog.entries.size} requests since the app started • see exactly what leaves your phone") { onOpen("netlog") }
+
         SectionLabel("Covers")
         RowCard {
             TitleSub("Custom covers", "$covers saved • long-press the cover in the player to change one", Modifier.weight(1f))
@@ -589,6 +616,31 @@ private fun FeaturesPage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack: 
         SwitchRow("Skip silence", "Jumps over silent gaps inside tracks", s.skipSilence.value) { s.skipSilence.set(it); vm.applyMisc() }
         SwitchRow("Fade out when the sleep timer ends", "Volume eases down over the last 15 seconds", s.sleepFade.value) { s.sleepFade.set(it) }
         SwitchRow("Shake to skip", "Shake the phone to jump to the next track (only while playing)", s.shake.value) { s.shake.set(it) }
+        SectionLabel("Car")
+        RowCard {
+            Column(Modifier.weight(1f)) {
+                Text("Car mode", color = t.text, fontWeight = FontWeight.SemiBold)
+                Text("Big buttons for a head unit. Auto = on big landscape screens", color = t.text.copy(alpha = 0.62f), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("never" to "Never", "auto" to "Auto", "always" to "Always").forEach { (id, label) ->
+                        val on = s.carStart.value == id
+                        Text(
+                            label, color = if (on) t.onAccent else t.text, fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                            modifier = Modifier.clip(RoundedCornerShape(50))
+                                .then(if (on) Modifier.background(Brush.horizontalGradient(listOf(t.primary, t.secondary))) else Modifier.border(1.dp, t.text.copy(alpha = 0.25f), RoundedCornerShape(50)))
+                                .clickable { s.carStart.set(id) }.padding(horizontal = 14.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+            }
+        }
+        RowCard(onClick = { vm.carMode = true }) {
+            Icon(I.Explore, null, tint = t.primary)
+            Spacer(Modifier.width(12.dp))
+            TitleSub("Open car mode now", null, Modifier.weight(1f))
+        }
+        SwitchRow("Play when the app opens", "Resumes your last queue by itself — useful when the head unit launches the app", s.autoPlayLaunch.value) { s.autoPlayLaunch.set(it) }
         SectionLabel("Player")
         SwitchRow("Keep screen on", "While the player page is open", s.keepScreenOn.value) { s.keepScreenOn.set(it) }
         SwitchRow("Open on lyrics", "Show lyrics first instead of the cover", s.lyricsDefault.value) { s.lyricsDefault.set(it) }
@@ -743,5 +795,33 @@ private fun ArrangePage(vm: PlayerViewModel, onBack: () -> Unit) {
             TitleSub("Back to the default order", null, Modifier.weight(1f))
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+
+// ---------------------------------------------------------------- network log
+@Composable
+private fun NetLogPage(onBack: () -> Unit) {
+    val t = LocalSudo.current
+    val entries = com.sudosoc.sudoplay.data.NetLog.entries
+    Column(Modifier.fillMaxSize()) {
+        SubHeader("Network log", onBack)
+        Text(
+            "Every request this app makes. With \"Download missing lyrics\" off, nothing here will ever appear: SUDOPLAY has no other network code.",
+            color = t.text.copy(alpha = 0.62f), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
+        )
+        if (entries.isEmpty()) Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+            Text("No requests yet", color = t.text.copy(alpha = 0.6f))
+        } else LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
+            lazyItems(entries.toList()) { e ->
+                val fmtT = remember(e.time) { java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(e.time)) }
+                RowCard {
+                    Column(Modifier.weight(1f)) {
+                        Text("${e.method} ${e.host}${e.path}", color = t.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("$fmtT • ${if (e.status > 0) "HTTP ${e.status}" else "failed"} • ${e.bytes} bytes • ${e.ms} ms", color = t.text.copy(alpha = 0.62f), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
     }
 }

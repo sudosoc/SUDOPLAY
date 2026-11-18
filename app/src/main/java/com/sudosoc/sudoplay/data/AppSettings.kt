@@ -72,6 +72,9 @@ class AppSettings(prefs: SharedPreferences) {
     val orderTransport = StringSetting(prefs, "o_transport", "shuffle,prev,play,next,repeat")
     val orderChips = StringSetting(prefs, "o_chips", "speed,eq,sleep")
 
+    /** dark | light | glass | black | accent | clear */
+    val widgetTheme = StringSetting(prefs, "w_theme", "dark")
+
     /** Tint the whole app with colours taken from the cover of the playing song. */
     val coverColors = BoolSetting(prefs, "a_cover_colors", false)
     val btnAb = BoolSetting(prefs, "b_ab", true)
@@ -94,10 +97,16 @@ class AppSettings(prefs: SharedPreferences) {
     val replayGain = BoolSetting(prefs, "p_rg", true)
 
     // Library (Extras)
+    /** Download missing lyrics from lrclib.net (off by default: it is the only thing that touches the network). */
+    val autoLyrics = BoolSetting(prefs, "lib_auto_lyrics", false)
     val minDurationSec = IntSetting(prefs, "lib_min_dur", 20)
     val hiddenFolders = StringSetting(prefs, "lib_hidden", "")
 
     // Features
+    /** never | auto (tablet-sized landscape screens, e.g. a head unit) | always */
+    val carStart = StringSetting(prefs, "car_start", "auto")
+    /** Start playing as soon as the app opens (handy when a head unit launches it on boot). */
+    val autoPlayLaunch = BoolSetting(prefs, "f_autoplay", false)
     val keepScreenOn = BoolSetting(prefs, "f_keep_on", false)
     val lyricsDefault = BoolSetting(prefs, "f_lyrics_default", false)
     val countPlays = BoolSetting(prefs, "f_count_plays", true)

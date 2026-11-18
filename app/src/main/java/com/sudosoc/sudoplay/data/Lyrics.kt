@@ -23,7 +23,7 @@ object LyricsLoader {
                 if (lrc.exists() && lrc.canRead()) parse(lrc.readText())?.let { return it }
             }
         }
-        return readUslt(ctx, song)?.let { parse(it) }
+        return readUslt(ctx, song)?.let { parse(it) } ?: LyricsFetcher.cached(ctx, song)
     }
 
     fun parse(text: String): Lyrics? {

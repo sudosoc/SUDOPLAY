@@ -37,6 +37,7 @@ import com.sudosoc.sudoplay.data.FxScenes
 import com.sudosoc.sudoplay.data.FxState
 import com.sudosoc.sudoplay.data.Haptics
 import com.sudosoc.sudoplay.data.Lyrics
+import com.sudosoc.sudoplay.data.LyricsFetcher
 import com.sudosoc.sudoplay.data.LyricsLoader
 import com.sudosoc.sudoplay.data.MusicRepository
 import com.sudosoc.sudoplay.data.PlaylistStore
@@ -114,6 +115,19 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     // ---- lyrics ----
     var lyrics by mutableStateOf<Lyrics?>(null); private set
     private var lyricsFor = -1L
+    var lyricsBusy by mutableStateOf(false); private set
+
+    /** The user asked for it (button in the lyrics view): look the current song up online right now. */
+    fun findLyricsOnline() {
+        val cur = current ?: return
+        if (lyricsBusy) return
+        lyricsBusy = true
+        viewModelScope.launch {
+            val l = withContext(Dispatchers.IO) { runCatching { LyricsFetcher.fetch(ctx, cur, force = true) }.getOrNull() }
+            lyricsBusy = false
+            if (l != null && lyricsFor == cur.id) lyrics = l
+        }
+    }
 
     // ---- play stats (drive the smart lists) ----
     var plays by mutableStateOf(parsePlays(prefs.getString("plays", "") ?: "")); private set
@@ -132,6 +146,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- car mode (full-screen landscape UI for the head unit) ----
     var carMode by mutableStateOf(false)
+    var carChecked = false
 
     // ---- open-player request (notification tap) ----
     var wantPlayer by mutableStateOf(false); private set
@@ -268,7 +283,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (items.isEmpty()) return
         val idx = prefs.getInt("q_idx", 0).coerceIn(0, items.lastIndex)
         c.setMediaItems(items, idx, prefs.getLong("q_pos", 0L))
-        c.prepare()   // paused: the user taps play when ready
+        c.prepare()   // paused unless "start playing when the app opens" is on
+        if (settings.autoPlayLaunch.value) c.play()
     }
 
     private fun sync() {
@@ -296,7 +312,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             lyricsFor = cur.id
             lyrics = null
             viewModelScope.launch {
-                val l = withContext(Dispatchers.IO) { runCatching { LyricsLoader.load(ctx, cur) }.getOrNull() }
+                val l = withContext(Dispatchers.IO) {
+                    runCatching { LyricsLoader.load(ctx, cur) ?: if (settings.autoLyrics.value) LyricsFetcher.fetch(ctx, cur) else null }.getOrNull()
+                }
                 if (lyricsFor == cur.id) lyrics = l
             }
         }

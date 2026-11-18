@@ -82,6 +82,16 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
         var detail by remember { mutableStateOf<Detail?>(null) }
         val scope = rememberCoroutineScope()
         val sheet = remember { SheetState(scope) }
+        val cfg = androidx.compose.ui.platform.LocalConfiguration.current
+        LaunchedEffect(Unit) {
+            if (!vm.carChecked) {
+                vm.carChecked = true
+                val start = vm.settings.carStart.value
+                val bigLandscape = cfg.smallestScreenWidthDp >= 560 && cfg.screenWidthDp > cfg.screenHeightDp
+                val carUi = (cfg.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) == android.content.res.Configuration.UI_MODE_TYPE_CAR
+                if (start == "always" || (start == "auto" && (bigLandscape || carUi))) vm.carMode = true
+            }
+        }
 
         BoxWithConstraints(Modifier.fillMaxSize()) {
             sheet.heightPx = with(LocalDensity.current) { maxHeight.toPx() }
@@ -128,6 +138,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                     }
                 }
                 BackHandler(enabled = sheet.isOpen) { sheet.close() }
+                if (vm.carMode) CarScreen(vm) { vm.carMode = false }
             }
             vm.playlistTarget?.let { PlaylistPickerDialog(vm, it) { vm.playlistTarget = null } }
         }
