@@ -55,7 +55,7 @@ fun SettingsTab(vm: PlayerViewModel) {
         page = when (page) {
             "app_themes", "player_themes", "seek_styles", "icon_styles", "player_buttons", "nav_bar" -> "appearance"
             "arrange" -> "player_buttons"
-            "stats" -> "features"
+            "stats", "dupes" -> "features"
             "gesture_editor" -> "props"
             "hidden_folders", "netlog" -> "extras"
             else -> "home"
@@ -73,6 +73,7 @@ fun SettingsTab(vm: PlayerViewModel) {
         "gesture_editor" -> GestureEditorPage(vm) { page = "props" }
         "nav_bar" -> NavBarPage(vm) { page = "appearance" }
         "stats" -> StatsPage(vm) { page = "features" }
+        "dupes" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) { SubHeader("Duplicate finder", { page = "features" }); DuplicatesBody(vm) }
         "extras" -> ExtrasPage(vm, onOpen = { page = it }) { page = "home" }
         "hidden_folders" -> HiddenFoldersPage(vm) { page = "extras" }
         "netlog" -> NetLogPage { page = "extras" }
@@ -163,7 +164,7 @@ private fun HomePage(vm: PlayerViewModel, onOpen: (String) -> Unit) {
         BigSection(I.Tune, "Properties", "الخصائص", "Gestures, seek sensitivity, vibration") { onOpen("props") }
         BigSection(I.AutoAwesome, "Features", "المميزات", "Sound, lyrics, play history, backup") { onOpen("features") }
         BigSection(I.Explore, "Car mode", "وضع السيارة", "Big landscape screen for the head unit") { vm.carMode = true }
-        Text("SUDOPLAY 0.5.0 • by SUDOSOC", color = t.text.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall,
+        Text("SUDOPLAY 0.6.0 • by SUDOSOC", color = t.text.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(20.dp))
     }
 }
@@ -616,6 +617,21 @@ private fun FeaturesPage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack: 
         SwitchRow("Skip silence", "Jumps over silent gaps inside tracks", s.skipSilence.value) { s.skipSilence.set(it); vm.applyMisc() }
         SwitchRow("Fade out when the sleep timer ends", "Volume eases down over the last 15 seconds", s.sleepFade.value) { s.sleepFade.set(it) }
         SwitchRow("Shake to skip", "Shake the phone to jump to the next track (only while playing)", s.shake.value) { s.shake.set(it) }
+        SectionLabel("Smart listening")
+        SwitchRow("Lecture mode", "Recordings longer than ${s.lectureMinutes.value} min remember where you stopped and your speed", s.lectureMode.value) { s.lectureMode.set(it) }
+        SwitchRow("Sound per output", "Remembers your EQ for each headphones / speaker (now: ${vm.outputName})", s.deviceEq.value) { s.deviceEq.set(it) }
+        SwitchRow("Resume when headphones connect", "Starts playing again when Bluetooth or wired audio connects", s.resumeOnConnect.value) { s.resumeOnConnect.set(it) }
+        NavRow(I.Search, "Duplicate finder", "Finds the same song stored twice") { onOpen("dupes") }
+        RowCard {
+            Column(Modifier.weight(1f)) {
+                Text("When you listen", color = t.text, fontWeight = FontWeight.SemiBold)
+                val mx = (vm.hourCounts.maxOrNull() ?: 0).coerceAtLeast(1)
+                Row(Modifier.fillMaxWidth().height(48.dp).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.Bottom) {
+                    vm.hourCounts.forEach { c -> Box(Modifier.weight(1f).fillMaxHeight((0.08f + 0.92f * c / mx)).background(t.primary.copy(alpha = if (c == 0) 0.2f else 0.9f), RoundedCornerShape(2.dp))) }
+                }
+                Text("0h                      12h                    23h", color = t.text.copy(alpha = 0.45f), fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp))
+            }
+        }
         SectionLabel("Car")
         RowCard {
             Column(Modifier.weight(1f)) {

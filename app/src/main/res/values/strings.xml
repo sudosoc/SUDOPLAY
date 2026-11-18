@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">SUDOPLAY</string>
+    <string name="sc_shuffle">Shuffle all</string>
+    <string name="sc_shuffle_long">Shuffle all songs</string>
+    <string name="sc_resume">Resume</string>
+    <string name="sc_resume_long">Resume playing</string>
+    <string name="sc_car">Car mode</string>
+    <string name="sc_car_long">Open car mode</string>
 </resources>

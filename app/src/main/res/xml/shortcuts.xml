@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="shuffle" android:enabled="true" android:shortcutShortLabel="@string/sc_shuffle" android:shortcutLongLabel="@string/sc_shuffle_long">
+        <intent android:action="com.sudosoc.sudoplay.SHUFFLE_ALL" android:targetPackage="com.sudosoc.sudoplay" android:targetClass="com.sudosoc.sudoplay.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="resume" android:enabled="true" android:shortcutShortLabel="@string/sc_resume" android:shortcutLongLabel="@string/sc_resume_long">
+        <intent android:action="com.sudosoc.sudoplay.RESUME" android:targetPackage="com.sudosoc.sudoplay" android:targetClass="com.sudosoc.sudoplay.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="car" android:enabled="true" android:shortcutShortLabel="@string/sc_car" android:shortcutLongLabel="@string/sc_car_long">
+        <intent android:action="com.sudosoc.sudoplay.CAR" android:targetPackage="com.sudosoc.sudoplay" android:targetClass="com.sudosoc.sudoplay.MainActivity" />
+    </shortcut>
+</shortcuts>

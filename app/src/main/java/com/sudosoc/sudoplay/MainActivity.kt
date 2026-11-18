@@ -29,7 +29,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(i: android.content.Intent?) {
-        if (i?.action == ACTION_OPEN_PLAYER) vm.requestPlayer()
+        when (i?.action) {
+            ACTION_OPEN_PLAYER -> vm.requestPlayer()
+            "com.sudosoc.sudoplay.SHUFFLE_ALL" -> { vm.requestPlayer(); vm.whenReady { vm.shuffleAll() } }
+            "com.sudosoc.sudoplay.RESUME" -> { vm.requestPlayer(); vm.whenReady { vm.resumeNow() } }
+            "com.sudosoc.sudoplay.CAR" -> vm.carMode = true
+        }
     }
 
     companion object { const val ACTION_OPEN_PLAYER = "com.sudosoc.sudoplay.OPEN_PLAYER" }

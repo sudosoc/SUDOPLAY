@@ -47,3 +47,15 @@ Android music player — Kotlin, Jetpack Compose, Media3 (ExoPlayer).
 - Setting to hide the gesture badge and keep only the rubber stretch.
 - Navigation bar: choose which tabs show and put it at the bottom, top, left or right.
 - Gifts: A-B loop, pitch (key shift), skip silence, sleep-timer fade-out, shake to skip, mono switch, "Mix for you" smart list, your stats, share a song, backup / restore of everything.
+
+## v0.6
+
+- **Audio engine**: ReplayGain-style loudness matching (analysed once per song, cached), crossfade (fade dip around song boundaries, not a true overlap), night-mode compressor, balance and channel swap, soft clipper.
+- **See the sound**: live spectrum, spectrogram and oscilloscope in the studio; the seek bar can show the song's real waveform.
+- **Car mode**: big landscape UI for a head unit (Never / Auto / Always).
+- **Video clip maker**: pick a part of a song, get a vertical 9:16 MP4 (720p/1080p) with cover, title, synced lyrics and live spectrum, built with MediaCodec. Also saves a still frame as PNG.
+- **Gesture editor and button order**: assign an action to every gesture; drag player buttons into any order with a live preview.
+- **Colors from the cover**: the whole app follows the playing song.
+- **Widgets**: small, large and square, six themes.
+- **Auto lyrics** (opt-in): LRCLIB lookup, with a Network log showing every request.
+- **Gifts**: lecture mode (resume position/speed on long audio), sound profile per headphones/speaker, resume when headphones connect, bookmarks, song info, duplicate finder, listening-hours chart, app shortcuts (Shuffle all / Resume / Car mode), clip maker, network log, night mode.

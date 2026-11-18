@@ -72,6 +72,15 @@ class AppSettings(prefs: SharedPreferences) {
     val orderTransport = StringSetting(prefs, "o_transport", "shuffle,prev,play,next,repeat")
     val orderChips = StringSetting(prefs, "o_chips", "speed,eq,sleep")
 
+    // Lecture mode: long recordings remember where you stopped and the speed you used
+    val lectureMode = BoolSetting(prefs, "lec_on", true)
+    val lectureMinutes = IntSetting(prefs, "lec_min", 10)
+    // Smart output
+    val deviceEq = BoolSetting(prefs, "dev_eq", true)
+    val resumeOnConnect = BoolSetting(prefs, "dev_resume", false)
+
+    val clipCredit = StringSetting(prefs, "clip_credit", "")
+
     /** dark | light | glass | black | accent | clear */
     val widgetTheme = StringSetting(prefs, "w_theme", "dark")
 

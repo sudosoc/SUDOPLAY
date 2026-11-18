@@ -19,6 +19,8 @@ object GestureActions {
         "ab" to "A–B loop point",
         "cover" to "Change cover (on the artwork)",
         "carmode" to "Car mode",
+        "clip" to "Make a video clip of this song",
+        "bookmark" to "Bookmark this moment",
         "close" to "Close the player",
     )
     fun label(id: String) = all.firstOrNull { it.first == id }?.second ?: "Nothing"

@@ -8,6 +8,9 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -148,10 +151,97 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     var carMode by mutableStateOf(false)
     var carChecked = false
 
+    // ---- video clip maker ----
+    var clipSong by mutableStateOf<Song?>(null)
+
     // ---- open-player request (notification tap) ----
     var wantPlayer by mutableStateOf(false); private set
     fun requestPlayer() { wantPlayer = true; viewModelScope.launch { delay(4000); wantPlayer = false } }
     fun playerOpened() { wantPlayer = false }
+
+    private val readyActions = mutableListOf<() -> Unit>()
+    /** Runs now if the library + player are ready, otherwise right after they are. */
+    fun whenReady(a: () -> Unit) { if (controller != null && songs.isNotEmpty()) a() else readyActions += a }
+    private fun flushReady() { if (controller != null && songs.isNotEmpty() && readyActions.isNotEmpty()) { val l = readyActions.toList(); readyActions.clear(); l.forEach { it() } } }
+    fun appContext() = ctx
+    var infoSong by mutableStateOf<Song?>(null)
+    fun shuffleAll() { val l = songs; if (l.isNotEmpty()) play(l, l.indices.random(), true) }
+    fun resumeNow() { controller?.let { if (it.mediaItemCount > 0) it.play() else shuffleAll() } }
+
+    // ---- lecture mode (long audio remembers position + speed) ----
+    private fun lectureSong(s: Song?) = s != null && settings.lectureMode.value && s.durationMs >= settings.lectureMinutes.value * 60_000L
+    private fun saveLecture() {
+        val c = controller ?: return
+        val s = current ?: return
+        if (!lectureSong(s) || !c.isPlaying) return
+        val pos = c.currentPosition
+        val e = prefs.edit()
+        if (pos < 5_000 || pos > s.durationMs - 8_000) e.remove("lec_${s.id}") else e.putLong("lec_${s.id}", pos)
+        e.putFloat("lecs_${s.id}", c.playbackParameters.speed).apply()
+    }
+
+    // ---- bookmarks (a note + a timestamp, on any song) ----
+    class Bookmark(val ms: Long, val note: String)
+    var bookmarks by mutableStateOf(loadBookmarks()); private set
+    private fun loadBookmarks(): Map<Long, List<Bookmark>> = runCatching {
+        val o = org.json.JSONObject(prefs.getString("bookmarks", "{}") ?: "{}")
+        o.keys().asSequence().associate { k ->
+            val a = o.getJSONArray(k)
+            k.toLong() to List(a.length()) { i -> a.getJSONArray(i).let { Bookmark(it.getLong(0), it.getString(1)) } }
+        }
+    }.getOrDefault(emptyMap())
+    private fun saveBookmarks() {
+        val o = org.json.JSONObject()
+        bookmarks.forEach { (id, list) -> o.put(id.toString(), org.json.JSONArray(list.map { org.json.JSONArray().put(it.ms).put(it.note) })) }
+        prefs.edit().putString("bookmarks", o.toString()).apply()
+    }
+    fun addBookmark() {
+        val s = current ?: return
+        val ms = position
+        val l = lyrics
+        val line = if (l != null && l.synced) l.lines.lastOrNull { it.timeMs <= ms }?.text?.trim()?.take(48)?.takeIf { it.isNotEmpty() } else null
+        val note = line ?: "Bookmark"
+        bookmarks = bookmarks + (s.id to ((bookmarks[s.id] ?: emptyList()) + Bookmark(ms, note)).sortedBy { it.ms })
+        saveBookmarks(); haptics.click()
+    }
+    fun removeBookmark(songId: Long, ms: Long) {
+        bookmarks = bookmarks + (songId to (bookmarks[songId] ?: emptyList()).filter { it.ms != ms })
+        saveBookmarks()
+    }
+
+    // ---- listening clock (plays per hour of the day) ----
+    var hourCounts by mutableStateOf(
+        (prefs.getString("hours", "") ?: "").split(",").mapNotNull { it.toIntOrNull() }.let { if (it.size == 24) it else List(24) { 0 } }
+    ); private set
+
+    // ---- smart output: remember a sound profile per headphones / speaker ----
+    private val audioMgr = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    var outputName by mutableStateOf("Phone speaker"); private set
+    private var outputKey = "speaker"
+    private fun currentOutput(): Pair<String, String> {
+        val devs = audioMgr.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        val order = listOf(
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, 26 /* BLE headset */, AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_USB_DEVICE,
+        )
+        for (t in order) devs.firstOrNull { it.type == t }?.let { d ->
+            val name = d.productName?.toString()?.takeIf { it.isNotBlank() } ?: when (t) { AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "Bluetooth"; AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> "USB audio"; else -> "Headphones" }
+            return "${t}_$name" to name
+        }
+        return "speaker" to "Phone speaker"
+    }
+    private fun routeChanged(added: Boolean) {
+        val (key, name) = currentOutput()
+        if (key == outputKey) return
+        outputKey = key; outputName = name
+        if (settings.deviceEq.value) prefs.getString("dfx_$key", null)?.let { fx = FxState.fromJson(it); sendFx(); prefs.edit().putString("fx", fx.toJson()).apply() }
+        val c = controller
+        if (added && key != "speaker" && settings.resumeOnConnect.value && c != null && !c.isPlaying && c.mediaItemCount > 0) c.play()
+    }
+    private val deviceCb = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>) = routeChanged(true)
+        override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>) = routeChanged(false)
+    }
 
     // ---- A-B loop ----
     var abA by mutableStateOf<Long?>(null); private set
@@ -206,7 +296,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val future = MediaController.Builder(ctx, token).buildAsync()
         future.addListener({
             runCatching { future.get() }.getOrNull()?.let {
-                controller = it
+                controller = it; flushReady()
                 it.addListener(listener)
                 if (it.mediaItemCount > 0) restored = true
                 sync()
@@ -225,9 +315,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 abB?.let { b -> abA?.let { a -> if (position >= b) seekTo(a) } }
                 updateShake()
                 if (sleepEndsAt != 0L && System.currentTimeMillis() > sleepEndsAt) sleepEndsAt = 0L
-                if (++tick % 10 == 0) saveQueue()
+                if (++tick % 10 == 0) { saveQueue(); saveLecture() }
             }
         }
+
+        currentOutput().let { outputKey = it.first; outputName = it.second }
+        audioMgr.registerAudioDeviceCallback(deviceCb, Handler(Looper.getMainLooper()))
 
         // pick up new / deleted music without a manual refresh
         ctx.contentResolver.registerContentObserver(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, mediaObserver)
@@ -261,7 +354,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private fun applyLibraryFilters() {
         val hid = hiddenFolders()
         val list = if (hid.isEmpty()) rawSongs else rawSongs.filter { it.folder !in hid }
-        songs = list
+        songs = list; flushReady()
         byId = rawSongs.associateBy { it.id }   // a hidden song that is already queued can still resolve
     }
 
@@ -322,6 +415,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             lastCounted = cur.id
             plays = plays + (cur.id to ((plays[cur.id] ?: 0) + 1))
             recent = (listOf(cur.id) + recent.filter { it != cur.id }).take(50)
+            val hr = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+            hourCounts = hourCounts.toMutableList().also { it[hr] = it[hr] + 1 }
+            prefs.edit().putString("hours", hourCounts.joinToString(",")).apply()
             prefs.edit()
                 .putString("plays", plays.entries.joinToString(",") { "${it.key}:${it.value}" })
                 .putString("recent", recent.joinToString(","))
@@ -382,7 +478,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (save) fxSave()
     }
 
-    fun fxSave() { prefs.edit().putString("fx", fx.toJson()).apply() }
+    fun fxSave() {
+        prefs.edit().putString("fx", fx.toJson()).apply()
+        if (settings.deviceEq.value) prefs.edit().putString("dfx_$outputKey", fx.toJson()).apply()
+    }
     fun toggleFx() { fxEdit { it.copy(enabled = !it.enabled) }; haptics.click() }
 
     fun setEqLevel(i: Int, v: Int) = fxEdit(save = false) { st ->
@@ -427,7 +526,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val c = controller ?: return
         if (list.isEmpty()) return
         shuffleOn?.let { c.shuffleModeEnabled = it }
-        c.setMediaItems(list.map(::toItem), index.coerceIn(0, list.lastIndex), 0L)
+        val idx = index.coerceIn(0, list.lastIndex)
+        val chosen = list[idx]
+        val lecture = lectureSong(chosen)
+        c.setMediaItems(list.map(::toItem), idx, if (lecture) prefs.getLong("lec_${chosen.id}", 0L) else 0L)
+        if (lecture) prefs.getFloat("lecs_${chosen.id}", 0f).takeIf { it > 0f }?.let { c.setPlaybackSpeed(it) }
         c.prepare(); c.play()
     }
 
@@ -512,6 +615,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         saveQueue()
         ctx.contentResolver.unregisterContentObserver(mediaObserver)
+        runCatching { audioMgr.unregisterAudioDeviceCallback(deviceCb) }
         controller?.removeListener(listener)
         controller?.release()
         super.onCleared()

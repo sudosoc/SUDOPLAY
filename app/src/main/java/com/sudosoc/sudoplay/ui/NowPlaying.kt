@@ -187,6 +187,8 @@ private fun PlayerContent(vm: PlayerViewModel, pt: PlayerTheme, sheet: SheetStat
             "ab" -> vm.abCycle()
             "cover" -> song?.let { coverFor = it }
             "carmode" -> { vm.carMode = true; sheet.close() }
+            "bookmark" -> { vm.addBookmark(); android.widget.Toast.makeText(vm.appContext(), "Bookmarked", android.widget.Toast.LENGTH_SHORT).show() }
+            "clip" -> song?.let { vm.clipSong = it; sheet.close() }
             "close" -> { vm.haptics.tick(); sheet.close() }
         }
     }

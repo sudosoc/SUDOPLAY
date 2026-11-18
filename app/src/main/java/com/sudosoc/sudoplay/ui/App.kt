@@ -139,6 +139,8 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                 }
                 BackHandler(enabled = sheet.isOpen) { sheet.close() }
                 if (vm.carMode) CarScreen(vm) { vm.carMode = false }
+                vm.infoSong?.let { SongInfoDialog(vm, it) { vm.infoSong = null } }
+                vm.clipSong?.let { ClipScreen(vm, it) { vm.clipSong = null } }
             }
             vm.playlistTarget?.let { PlaylistPickerDialog(vm, it) { vm.playlistTarget = null } }
         }
