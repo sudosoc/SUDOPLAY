@@ -42,24 +42,56 @@ class PlaybackService : MediaSessionService() {
     private var fading = false
     private var fadeStart = 0L
     private var fadeLen = 15_000L
+    private var sleepMul = 1f
+    private var xfMul = 1f
+    private var xfSecs = 0
+    private var rgOn = true
     private val sleepRunnable = Runnable {
         session?.player?.pause()
         fading = false
-        exo.volume = baseVolume()
+        sleepMul = 1f
+        applyVolume()
     }
     private val fadeStep = object : Runnable {
         override fun run() {
             if (!fading) return
             val f = ((System.currentTimeMillis() - fadeStart).toFloat() / fadeLen).coerceIn(0f, 1f)
-            exo.volume = baseVolume() * (1f - f)
+            sleepMul = 1f - f
+            applyVolume()
             if (f < 1f) handler.postDelayed(this, 200)
         }
     }
     private fun baseVolume(): Float = lastFx?.let { if (it.enabled) 10f.pow(it.preamp / 200f).coerceIn(0f, 1f) else 1f } ?: 1f
+    private fun applyVolume() { exo.volume = (baseVolume() * sleepMul * xfMul).coerceIn(0f, 1f) }
+
+    /** Runs while playing: crossfade volume dips around song boundaries + the per-song loudness gain. */
+    private fun kick() { handler.removeCallbacks(tick); handler.post(tick) }
+    private val tick = object : Runnable {
+        override fun run() {
+            val p = exo
+            val id = p.currentMediaItem?.mediaId
+            FxBus.targetGain = if (rgOn && id != null) 10f.pow((FxBus.gains[id] ?: 0f) / 20f) else 1f
+            var m = 1f
+            val len = xfSecs * 1000L
+            if (len > 0 && p.isPlaying) {
+                val dur = p.duration
+                val pos = p.currentPosition
+                if (dur != C.TIME_UNSET && dur > len * 3) {
+                    val hasNext = p.hasNextMediaItem() || p.repeatMode == Player.REPEAT_MODE_ALL
+                    val remain = dur - pos
+                    if (remain < len && hasNext && p.repeatMode != Player.REPEAT_MODE_ONE) m = minOf(m, remain.toFloat() / len)
+                    if (pos < len) m = minOf(m, pos.toFloat() / len)
+                }
+            }
+            val curve = kotlin.math.sin(m.coerceIn(0f, 1f) * Math.PI.toFloat() / 2f)
+            if (kotlin.math.abs(curve - xfMul) > 0.004f) { xfMul = curve; if (!fading) applyVolume() }
+            if (p.isPlaying) handler.postDelayed(this, 120)
+        }
+    }
     private fun startFade() { fading = true; fadeStart = System.currentTimeMillis(); handler.post(fadeStep) }
     private fun cancelSleep() {
         handler.removeCallbacks(sleepRunnable); handler.removeCallbacks(fadeStep); handler.removeCallbacks(startFadeRunnable)
-        if (fading) { fading = false; exo.volume = baseVolume() }
+        if (fading) { fading = false; sleepMul = 1f; applyVolume() }
     }
     private val startFadeRunnable = Runnable { startFade() }
 
@@ -96,6 +128,11 @@ class PlaybackService : MediaSessionService() {
         exo = player
         player.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) = attachEffects(audioSessionId)
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                handler.removeCallbacks(tick)
+                if (isPlaying) kick() else { xfMul = 1f; applyVolume() }
+            }
+            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) { kick() }
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 // the "end of song" sleep timer is one-shot
                 if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) exo.pauseAtEndOfMediaItems = false
@@ -148,7 +185,7 @@ class PlaybackService : MediaSessionService() {
         }
         loud?.let { runCatching { it.setTargetGain(st.loud); it.enabled = on && st.loud > 0 } }
         // preamp: attenuate before the effects so boosted EQ doesn't clip
-        if (!fading) exo.volume = baseVolume()
+        applyVolume()
         FxBus.set(st)
     }
 
@@ -219,6 +256,9 @@ class PlaybackService : MediaSessionService() {
                 }
                 CMD_MISC -> {
                     exo.skipSilenceEnabled = args.getBoolean(KEY_SKIP, false)
+                    xfSecs = args.getInt(KEY_XFADE, 0)
+                    rgOn = args.getBoolean(KEY_RG, true)
+                    kick()
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
                 CMD_EQ_SET -> {
@@ -235,6 +275,8 @@ class PlaybackService : MediaSessionService() {
         const val CMD_EQ_INFO = "sudoplay.eq.info"
         const val CMD_EQ_SET = "sudoplay.eq.set"
         const val CMD_MISC = "sudoplay.misc"
+        const val KEY_XFADE = "xfade"
+        const val KEY_RG = "rg"
         const val KEY_SKIP = "skip"
         const val KEY_FADE = "fade"
         const val KEY_MIN = "minutes"

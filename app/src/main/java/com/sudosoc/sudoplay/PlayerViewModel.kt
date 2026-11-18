@@ -42,7 +42,11 @@ import com.sudosoc.sudoplay.data.MusicRepository
 import com.sudosoc.sudoplay.data.PlaylistStore
 import com.sudosoc.sudoplay.data.Smart
 import com.sudosoc.sudoplay.data.Song
+import com.sudosoc.sudoplay.playback.Analyzer
+import com.sudosoc.sudoplay.playback.FxBus
 import com.sudosoc.sudoplay.playback.PlaybackService
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -91,6 +95,22 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     var sleepEndOfSong by mutableStateOf(false); private set
     private var sleepSongId = -1L
 
+    // ---- analysis (loudness gain + real waveform) ----
+    var wave by mutableStateOf<FloatArray?>(null); private set
+    private var waveFor = -1L
+    private val analysisLock = Mutex()
+    private val analysing = HashSet<Long>()
+    private fun analyzeSong(s: Song, forCurrent: Boolean) {
+        if (!analysing.add(s.id)) return
+        viewModelScope.launch {
+            val r = withContext(Dispatchers.IO) { analysisLock.withLock { Analyzer.analyze(ctx, s.id, s.uri, s.durationMs) } }
+            analysing.remove(s.id)
+            if (r == null) return@launch
+            FxBus.gains[s.id.toString()] = r.gainDb
+            if (forCurrent && current?.id == s.id) wave = r.peaks.takeIf { it.isNotEmpty() }
+        }
+    }
+
     // ---- lyrics ----
     var lyrics by mutableStateOf<Lyrics?>(null); private set
     private var lyricsFor = -1L
@@ -109,6 +129,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     var eqMin by mutableIntStateOf(-1500); private set
     var eqMax by mutableIntStateOf(1500); private set
     var eqFreqs by mutableStateOf<List<Int>>(emptyList()); private set
+
+    // ---- car mode (full-screen landscape UI for the head unit) ----
+    var carMode by mutableStateOf(false)
 
     // ---- open-player request (notification tap) ----
     var wantPlayer by mutableStateOf(false); private set
@@ -263,6 +286,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val cur = current
         if (sleepEndOfSong && cur?.id != sleepSongId) sleepEndOfSong = false
         if (cur?.id != abSong) { abSong = cur?.id ?: -1L; abA = null; abB = null }
+        if (cur != null && cur.id != waveFor) {
+            waveFor = cur.id
+            wave = Analyzer.cached(ctx, cur.id)?.peaks?.takeIf { it.isNotEmpty() }
+            analyzeSong(cur, true)
+        }
+        queue.getOrNull(queueIndex + 1)?.let { n -> if (FxBus.gains[n.id.toString()] == null) analyzeSong(n, false) }
         if (cur != null && cur.id != lyricsFor) {
             lyricsFor = cur.id
             lyrics = null
@@ -443,7 +472,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun applyMisc() {
         controller?.sendCustomCommand(
             SessionCommand(PlaybackService.CMD_MISC, Bundle.EMPTY),
-            bundleOf(PlaybackService.KEY_SKIP to settings.skipSilence.value),
+            bundleOf(
+                PlaybackService.KEY_SKIP to settings.skipSilence.value,
+                PlaybackService.KEY_XFADE to settings.crossfade.value,
+                PlaybackService.KEY_RG to settings.replayGain.value,
+            ),
         )
     }
 

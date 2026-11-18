@@ -34,6 +34,9 @@ val SeekStyles: List<Pair<String, String>> = listOf(
     "blocks" to "Blocks", "ruler" to "Ruler", "liquid" to "Liquid", "hairline" to "Hairline", "live" to "Live spectrum",
 )
 
+/** Real peak envelope of the playing song (160 bins, 0..1) when the analyser has finished; null before that. */
+val LocalWave = androidx.compose.runtime.compositionLocalOf<FloatArray?> { null }
+
 private fun hash01(i: Int, seed: Long): Float {
     var x = (i * 374761393L + seed * 668265263L) xor 0x5bd1e995L
     x = (x xor (x shr 13)) * 1274126177L
@@ -60,6 +63,7 @@ fun SeekBar(
     val cbChange by rememberUpdatedState(onChange)
     val cbDone by rememberUpdatedState(onDone)
     val phaseState = rememberPhase(animated, 2200)
+    val wave = LocalWave.current
     val p = progress.coerceIn(0f, 1f)
 
     val gesture = if (!interactive) Modifier else Modifier.pointerInput(Unit) {
@@ -122,7 +126,7 @@ fun SeekBar(
                     Offset(i * (sw + gap), (size.height - th) / 2), Size(sw, th), CornerRadius(3.dp.toPx()),
                 )
             }
-            "bars" -> bars(p, on, off, 56, seed, 3f)
+            "bars" -> bars(p, on, off, if (wave != null) 80 else 56, seed, 3f, wave)
             "dots" -> {
                 val n = 30; val y = size.height / 2
                 for (i in 0 until n) {
@@ -194,11 +198,16 @@ private fun DrawScope.line(th: Float, p: Float, on: Color, off: Color) {
     if (p > 0f) drawLine(on, Offset(0f, y), Offset(size.width * p, y), th, StrokeCap.Round)
 }
 
-private fun DrawScope.bars(p: Float, on: Color, off: Color, n: Int, seed: Long, bwFactor: Float) {
+private fun DrawScope.bars(p: Float, on: Color, off: Color, n: Int, seed: Long, bwFactor: Float, wave: FloatArray? = null) {
     val gap = bwFactor.dp.toPx() * 0.55f
     val bw = (size.width - gap * (n - 1)) / n
     for (i in 0 until n) {
-        val h = size.height * (0.22f + 0.78f * hash01(i, seed))
+        val v = if (wave != null && wave.isNotEmpty()) {
+            val a = (i * wave.size / n).coerceIn(0, wave.size - 1)
+            val b = ((i + 1) * wave.size / n).coerceIn(a + 1, wave.size)
+            var m = 0f; for (k in a until b) m = maxOf(m, wave[k]); m
+        } else hash01(i, seed)
+        val h = size.height * (if (wave != null) 0.08f + 0.92f * v else 0.22f + 0.78f * v)
         val f = (i + 0.5f) / n
         drawRoundRect(if (f <= p) on else off, Offset(i * (bw + gap), (size.height - h) / 2), Size(bw, h), CornerRadius(bw / 2))
     }

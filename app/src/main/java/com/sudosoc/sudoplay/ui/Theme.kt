@@ -10,6 +10,9 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
@@ -139,7 +142,7 @@ val AppTheme.onAccent: Color
 val LocalSudo = staticCompositionLocalOf<AppTheme> { Themes.all[0] }
 
 @Composable
-fun SudoPlayTheme(themeId: String, content: @Composable () -> Unit) {
+fun SudoPlayTheme(themeId: String, cover: android.graphics.Bitmap? = null, content: @Composable () -> Unit) {
     val ctx = LocalContext.current
     var t = Themes.byId(themeId)
     if (t.dynamic && Build.VERSION.SDK_INT >= 31) {
@@ -148,6 +151,16 @@ fun SudoPlayTheme(themeId: String, content: @Composable () -> Unit) {
         t = t.copy(
             dark = dark, bgTop = cs.background, bgBottom = cs.surfaceVariant, surface = cs.surfaceContainer,
             primary = cs.primary, secondary = cs.tertiary, text = cs.onBackground,
+        )
+    }
+    if (cover != null) {
+        val ct = remember(cover, t.id) { coverTheme(t, cover) }
+        val spec = tween<Color>(700)
+        t = t.copy(
+            dark = true,
+            bgTop = animateColorAsState(ct.bgTop, spec, label = "c1").value, bgBottom = animateColorAsState(ct.bgBottom, spec, label = "c2").value,
+            surface = animateColorAsState(ct.surface, spec, label = "c3").value, primary = animateColorAsState(ct.primary, spec, label = "c4").value,
+            secondary = animateColorAsState(ct.secondary, spec, label = "c5").value, text = animateColorAsState(ct.text, spec, label = "c6").value,
         )
     }
     val onPrimary = if (t.primary.luminance() > 0.5f) Color.Black else Color.White

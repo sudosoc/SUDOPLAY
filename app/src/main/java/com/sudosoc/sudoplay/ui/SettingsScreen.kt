@@ -13,6 +13,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -34,6 +35,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -49,7 +53,9 @@ fun SettingsTab(vm: PlayerViewModel) {
     BackHandler(enabled = page != "home") {
         page = when (page) {
             "app_themes", "player_themes", "seek_styles", "icon_styles", "player_buttons", "nav_bar" -> "appearance"
+            "arrange" -> "player_buttons"
             "stats" -> "features"
+            "gesture_editor" -> "props"
             "hidden_folders" -> "extras"
             else -> "home"
         }
@@ -61,12 +67,14 @@ fun SettingsTab(vm: PlayerViewModel) {
         "player_themes" -> PlayerThemesPage(vm) { page = "appearance" }
         "seek_styles" -> SeekStylesPage(vm) { page = "appearance" }
         "icon_styles" -> IconStylesPage(vm) { page = "appearance" }
-        "player_buttons" -> PlayerButtonsPage(vm) { page = "appearance" }
+        "player_buttons" -> PlayerButtonsPage(vm, onOpen = { page = it }) { page = "appearance" }
+        "arrange" -> ArrangePage(vm) { page = "player_buttons" }
+        "gesture_editor" -> GestureEditorPage(vm) { page = "props" }
         "nav_bar" -> NavBarPage(vm) { page = "appearance" }
         "stats" -> StatsPage(vm) { page = "features" }
         "extras" -> ExtrasPage(vm, onOpen = { page = it }) { page = "home" }
         "hidden_folders" -> HiddenFoldersPage(vm) { page = "extras" }
-        "props" -> PropertiesPage(vm) { page = "home" }
+        "props" -> PropertiesPage(vm, onOpen = { page = it }) { page = "home" }
         "features" -> FeaturesPage(vm, onOpen = { page = it }) { page = "home" }
         else -> HomePage(vm) { page = it }
     }
@@ -192,6 +200,7 @@ private fun AppearancePage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack
         NavRow(I.Extension, "Player buttons", "Choose which buttons are shown") { onOpen("player_buttons") }
         SectionLabel("App")
         NavRow(I.Apps, "Navigation bar", "Pick the tabs and move it: ${s.navPos.value}") { onOpen("nav_bar") }
+        SwitchRow("Colors from the cover", "The whole app takes its colors from the song that is playing", s.coverColors.value) { s.coverColors.set(it) }
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -341,10 +350,11 @@ private fun IconStylesPage(vm: PlayerViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun PlayerButtonsPage(vm: PlayerViewModel, onBack: () -> Unit) {
+private fun PlayerButtonsPage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack: () -> Unit) {
     val s = vm.settings
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         SubHeader("Player buttons", onBack)
+        NavRow(I.SwapVert, "Arrange buttons", "Drag the buttons into the order you like") { onOpen("arrange") }
         Text("Hide what you don't use. Play / pause always stays.", color = LocalSudo.current.text.copy(alpha = 0.62f), style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp))
         SectionLabel("Top bar")
@@ -438,15 +448,15 @@ private fun HiddenFoldersPage(vm: PlayerViewModel, onBack: () -> Unit) {
 
 // ---------------------------------------------------------------- properties
 @Composable
-private fun PropertiesPage(vm: PlayerViewModel, onBack: () -> Unit) {
+private fun PropertiesPage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack: () -> Unit) {
     val s = vm.settings
     val t = LocalSudo.current
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         SubHeader("Properties", onBack)
+        NavRow(I.Tune, "Gesture editor", "Choose what every gesture does") { onOpen("gesture_editor") }
         SectionLabel("Player gestures")
         SwitchRow("Double-tap to play / pause", "Double-tap anywhere on the player page", s.doubleTap.value) { s.doubleTap.set(it) }
-        SwitchRow("Swipe to change track", "Swipe right for next, left for previous", s.swipe.value) { s.swipe.set(it) }
-        SwitchRow("Invert swipe direction", "Swipe left for next, right for previous", s.swipeInvert.value) { s.swipeInvert.set(it) }
+        SwitchRow("Swipe gestures", "Horizontal swipes on the player page", s.swipe.value) { s.swipe.set(it) }
         SwitchRow("Long-press and drag to seek", "Hold, then drag left or right", s.scrub.value) { s.scrub.set(it) }
         SliderRow(
             "Seek sensitivity", "${s.scrubSeconds.value}s per full swipe", s.scrubSeconds.value.toFloat(), 30f..300f, steps = 8,
@@ -600,6 +610,137 @@ private fun FeaturesPage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack: 
             Icon(I.RestartAlt, null, tint = t.primary)
             Spacer(Modifier.width(12.dp))
             TitleSub("Restore", "Pick a backup file; the app restarts", Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+
+// ---------------------------------------------------------------- gesture editor
+@Composable
+private fun ActionPicker(title: String, sub: String?, current: String, onPick: (String) -> Unit) {
+    val t = LocalSudo.current
+    var open by remember { mutableStateOf(false) }
+    Box {
+        RowCard(onClick = { open = true }) {
+            TitleSub(title, sub, Modifier.weight(1f))
+            Text(GestureActions.label(current), color = t.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+        }
+        SudoMenu(open, { open = false }) {
+            GestureActions.all.forEach { (id, label) -> SudoMenuItem(label, selected = id == current) { onPick(id); open = false } }
+        }
+    }
+}
+
+@Composable
+private fun GestureEditorPage(vm: PlayerViewModel, onBack: () -> Unit) {
+    val s = vm.settings
+    val t = LocalSudo.current
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        SubHeader("Gesture editor", onBack)
+        Text("Pick the action for each gesture on the player page. Buttons and lists keep working as usual.", color = t.text.copy(alpha = 0.62f),
+            style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp))
+        SectionLabel("Double-tap")
+        SwitchRow("Double-tap gestures", null, s.doubleTap.value) { s.doubleTap.set(it) }
+        ActionPicker("Left third", "Double-tap on the left side", s.gDtL.value) { s.gDtL.set(it) }
+        ActionPicker("Middle", "Double-tap in the center", s.gDtC.value) { s.gDtC.set(it) }
+        ActionPicker("Right third", "Double-tap on the right side", s.gDtR.value) { s.gDtR.set(it) }
+        SectionLabel("Swipes")
+        SwitchRow("Swipe gestures", null, s.swipe.value) { s.swipe.set(it) }
+        ActionPicker("Swipe right", null, s.gSwR.value) { s.gSwR.set(it) }
+        ActionPicker("Swipe left", null, s.gSwL.value) { s.gSwL.set(it) }
+        ActionPicker("Swipe up", "On the cover area; lists keep scrolling", s.gSwU.value) { s.gSwU.set(it) }
+        SectionLabel("Touch and hold")
+        SwitchRow("Hold and drag to seek", null, s.scrub.value) { s.scrub.set(it) }
+        ActionPicker("Hold, then let go", "Without dragging", s.gLp.value) { s.gLp.set(it) }
+        ActionPicker("Two-finger tap", "Tap with two fingers at once", s.gTwo.value) { s.gTwo.set(it) }
+        RowCard(onClick = {
+            s.gDtL.set("playpause"); s.gDtC.set("playpause"); s.gDtR.set("playpause")
+            s.gSwR.set("next"); s.gSwL.set("prev"); s.gSwU.set("none"); s.gLp.set("cover"); s.gTwo.set("none")
+        }) {
+            Icon(I.RestartAlt, null, tint = t.primary)
+            Spacer(Modifier.width(12.dp))
+            TitleSub("Back to defaults", null, Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+// ---------------------------------------------------------------- arrange buttons
+@Composable
+private fun ReorderRow(order: List<String>, shown: (String) -> Boolean, onChange: (List<String>) -> Unit) {
+    val t = LocalSudo.current
+    val cur by rememberUpdatedState(order)
+    val cb by rememberUpdatedState(onChange)
+    var rowW by remember { mutableFloatStateOf(1f) }
+    var dragging by remember { mutableStateOf<String?>(null) }
+    var off by remember { mutableFloatStateOf(0f) }
+    Row(Modifier.padding(horizontal = 14.dp, vertical = 4.dp).fillMaxWidth().onSizeChanged { rowW = it.width.toFloat() }) {
+        order.forEach { id ->
+            key(id) {
+                val on = shown(id)
+                val isDrag = dragging == id
+                Box(
+                    Modifier.weight(1f).padding(3.dp)
+                        .graphicsLayer { translationX = if (isDrag) off else 0f; scaleX = if (isDrag) 1.08f else 1f; scaleY = if (isDrag) 1.08f else 1f; alpha = if (on) 1f else 0.45f }
+                        .sudoPanel(RoundedCornerShape(16.dp))
+                        .then(if (isDrag) Modifier.border(2.dp, t.primary, RoundedCornerShape(16.dp)) else Modifier)
+                        .pointerInput(id) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { dragging = id; off = 0f },
+                                onDrag = { ch, d ->
+                                    ch.consume()
+                                    off += d.x
+                                    val step = rowW / cur.size
+                                    val i = cur.indexOf(id)
+                                    val target = (i + Math.round(off / step)).coerceIn(0, cur.lastIndex)
+                                    if (target != i) {
+                                        val l = cur.toMutableList(); l.removeAt(i); l.add(target, id)
+                                        off -= (target - i) * step
+                                        cb(l)
+                                    }
+                                },
+                                onDragEnd = { dragging = null; off = 0f },
+                                onDragCancel = { dragging = null; off = 0f },
+                            )
+                        }
+                        .padding(vertical = 14.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(ButtonOrder.names[id] ?: id, color = if (isDrag) t.primary else t.text, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArrangePage(vm: PlayerViewModel, onBack: () -> Unit) {
+    val s = vm.settings
+    val t = LocalSudo.current
+    val art by rememberPreviewArt(vm)
+    val btn = playerButtons(s)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        SubHeader("Arrange buttons", onBack)
+        Text("Press and hold a button, then drag it left or right. Dimmed ones are hidden in \"Player buttons\".", color = t.text.copy(alpha = 0.62f),
+            style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp))
+        Box(Modifier.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+            PlayerMock(PlayerThemes.byId(s.playerTheme.value), art, btn, s.seekStyle.value, vm.current?.title ?: "Midnight Drive", vm.current?.artist ?: "SUDOSOC", Modifier.width(190.dp))
+        }
+        SectionLabel("Top bar")
+        ReorderRow(btn.top, { if (it == "lyrics") btn.lyrics else btn.queue }) { s.orderTop.set(it.joinToString(",")) }
+        SectionLabel("Next to the title")
+        ReorderRow(btn.title, { if (it == "fav") btn.fav else btn.playlist }) { s.orderTitle.set(it.joinToString(",")) }
+        SectionLabel("Transport")
+        ReorderRow(btn.transport, { when (it) { "shuffle" -> btn.shuffle; "prev" -> btn.prev; "next" -> btn.next; "repeat" -> btn.repeat; else -> true } }) { s.orderTransport.set(it.joinToString(",")) }
+        SectionLabel("Bottom chips")
+        ReorderRow(btn.chips, { when (it) { "speed" -> btn.speed; "eq" -> btn.eq; else -> btn.sleep } }) { s.orderChips.set(it.joinToString(",")) }
+        RowCard(onClick = {
+            s.orderTop.set("lyrics,queue"); s.orderTitle.set("fav,add"); s.orderTransport.set("shuffle,prev,play,next,repeat"); s.orderChips.set("speed,eq,sleep")
+        }) {
+            Icon(I.RestartAlt, null, tint = t.primary)
+            Spacer(Modifier.width(12.dp))
+            TitleSub("Back to the default order", null, Modifier.weight(1f))
         }
         Spacer(Modifier.height(24.dp))
     }

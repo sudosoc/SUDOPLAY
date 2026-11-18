@@ -55,6 +55,25 @@ class AppSettings(prefs: SharedPreferences) {
     val btnSleep = BoolSetting(prefs, "b_sleep", true)
 
     val gestureIcon = BoolSetting(prefs, "g_icon", true)
+
+    // Gesture editor: which action each gesture performs (ids from GestureActions)
+    val gDtL = StringSetting(prefs, "ga_dt_l", "playpause")
+    val gDtC = StringSetting(prefs, "ga_dt_c", "playpause")
+    val gDtR = StringSetting(prefs, "ga_dt_r", "playpause")
+    val gSwR = StringSetting(prefs, "ga_sw_r", "next")
+    val gSwL = StringSetting(prefs, "ga_sw_l", "prev")
+    val gSwU = StringSetting(prefs, "ga_sw_u", "none")
+    val gLp = StringSetting(prefs, "ga_lp", "cover")
+    val gTwo = StringSetting(prefs, "ga_two", "none")
+
+    // Button order (comma separated ids)
+    val orderTop = StringSetting(prefs, "o_top", "lyrics,queue")
+    val orderTitle = StringSetting(prefs, "o_title", "fav,add")
+    val orderTransport = StringSetting(prefs, "o_transport", "shuffle,prev,play,next,repeat")
+    val orderChips = StringSetting(prefs, "o_chips", "speed,eq,sleep")
+
+    /** Tint the whole app with colours taken from the cover of the playing song. */
+    val coverColors = BoolSetting(prefs, "a_cover_colors", false)
     val btnAb = BoolSetting(prefs, "b_ab", true)
 
     // Navigation bar
@@ -70,6 +89,9 @@ class AppSettings(prefs: SharedPreferences) {
     val sleepFade = BoolSetting(prefs, "p_sleep_fade", true)
     val shake = BoolSetting(prefs, "p_shake", false)
     val pitchSemi = IntSetting(prefs, "p_pitch", 0)
+    /** seconds of fade-out / fade-in around song boundaries; 0 = off */
+    val crossfade = IntSetting(prefs, "p_xfade", 0)
+    val replayGain = BoolSetting(prefs, "p_rg", true)
 
     // Library (Extras)
     val minDurationSec = IntSetting(prefs, "lib_min_dur", 20)

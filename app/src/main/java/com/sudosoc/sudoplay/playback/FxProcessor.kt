@@ -13,8 +13,10 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.log10
 import kotlin.math.pow
+import kotlin.math.abs
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.tanh
 
 /** Parameters + analysis results shared between the audio thread and the UI (same process). */
 object FxBus {
@@ -34,12 +36,24 @@ object FxBus {
     @Volatile var echoMs = 320
     @Volatile var echoFb = 0.35f
     @Volatile var echoMix = 0.3f
+    @Volatile var balance = 0f
+    @Volatile var swap = false
+    @Volatile var compOn = false
+    @Volatile var compAmt = 0.5f
+
+    /** Loudness-normalisation gain (linear) the processor glides towards, and the per-song gains found by the analyser (dB, by media id). */
+    @Volatile var targetGain = 1f
+    val gains = java.util.concurrent.ConcurrentHashMap<String, Float>()
+
+    /** Last 256 mono samples, for the oscilloscope view. */
+    @Volatile var scope = FloatArray(256)
 
     fun set(s: FxState) {
         enabled = s.enabled
         widthOn = s.widthOn; width = s.width / 100f
         reverbOn = s.reverbOn; room = s.room / 100f; damp = s.damp / 100f; reverbMix = s.reverbMix / 100f
         echoOn = s.echoOn; echoMs = s.echoMs; echoFb = s.echoFb / 100f; echoMix = s.echoMix / 100f
+        balance = s.balance / 100f; swap = s.swapCh; compOn = s.compOn; compAmt = s.compAmt / 100f
     }
 }
 
@@ -61,6 +75,10 @@ class FxProcessor : BaseAudioProcessor() {
     private var apL = emptyArray<Allpass>()
     private var apR = emptyArray<Allpass>()
 
+    private var curGain = 1f
+    private var env = 0f
+    private val scopeBuf = FloatArray(256)
+    private var scopeIdx = 0
     private val ring = FloatArray(N)
     private var rp = 0
     private val re = FloatArray(N)
@@ -91,6 +109,7 @@ class FxProcessor : BaseAudioProcessor() {
         apL.forEach { it.buf.fill(0f); it.idx = 0 }
         apR.forEach { it.buf.fill(0f); it.idx = 0 }
         rp = 0
+        env = 0f
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
@@ -111,12 +130,37 @@ class FxProcessor : BaseAudioProcessor() {
         val delay = (FxBus.echoMs * sr / 1000).coerceIn(1, echoL.size - 1)
         val efb = FxBus.echoFb
         val emix = FxBus.echoMix
+        val bal = FxBus.balance
+        val lGain = if (on && bal > 0f) 1f - bal else 1f
+        val rGain = if (on && bal < 0f) 1f + bal else 1f
+        val swap = on && FxBus.swap && ch == 2
+        val cOn = on && FxBus.compOn
+        val camt = FxBus.compAmt
+        val thr = 0.55f - 0.45f * camt
+        val ratio = 2f + 8f * camt
+        val makeup = 1f / (thr + (1f - thr) / ratio)
+        val tgt = FxBus.targetGain
 
         var pos = inB.position()
         for (f in 0 until frames) {
             var l = inB.getShort(pos) / 32768f; pos += 2
             var r = l
             if (ch == 2) { r = inB.getShort(pos) / 32768f; pos += 2 }
+
+            // loudness normalisation glides to its target so a late analysis result never clicks
+            curGain += (tgt - curGain) * 0.0008f
+            l *= curGain; r *= curGain
+
+            if (swap) { val tmp = l; l = r; r = tmp }
+            if (ch == 2) { l *= lGain; r *= rGain }
+
+            if (cOn) {
+                val lvl = maxOf(abs(l), abs(r))
+                env += (lvl - env) * (if (lvl > env) 0.02f else 0.0004f)
+                val g = if (env > thr) (thr + (env - thr) / ratio) / env else 1f
+                val k = g * (if (env > thr) makeup else 1f + (makeup - 1f) * 0.6f)
+                l *= k; r *= k
+            }
 
             if (wOn) {
                 val m = (l + r) * 0.5f
@@ -151,7 +195,9 @@ class FxProcessor : BaseAudioProcessor() {
                 r = r * (1f - 0.25f * rm) + wr * rm
             }
 
+            l = softClip(l); r = softClip(r)
             ring[rp] = (l + r) * 0.5f
+            if ((rp and 7) == 0) { scopeBuf[scopeIdx] = ring[rp]; if (++scopeIdx >= scopeBuf.size) { scopeIdx = 0; FxBus.scope = scopeBuf.copyOf() } }
             if (++rp >= N) { rp = 0; analyze() }
 
             out.putShort((l * 32767f).toInt().coerceIn(-32768, 32767).toShort())
@@ -159,6 +205,12 @@ class FxProcessor : BaseAudioProcessor() {
         }
         inputBuffer.position(inputBuffer.limit())
         out.flip()
+    }
+
+    private fun softClip(x: Float): Float = when {
+        x > 0.92f -> 0.92f + 0.08f * tanh((x - 0.92f) / 0.08f)
+        x < -0.92f -> -0.92f - 0.08f * tanh((-x - 0.92f) / 0.08f)
+        else -> x
     }
 
     private fun analyze() {

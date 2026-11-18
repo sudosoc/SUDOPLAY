@@ -86,7 +86,11 @@ fun PlayerMock(
 }
 
 private fun mockChips(btn: PlayerButtons): @Composable RowScope.() -> Unit = {
-    if (btn.speed) StaticChip(I.Speed, "1.25x", true)
-    if (btn.eq) StaticChip(I.Equalizer, "EQ", true)
-    if (btn.sleep) StaticChip(I.Bedtime, "Sleep")
+    btn.chips.forEach { id ->
+        when (id) {
+            "speed" -> if (btn.speed) StaticChip(I.Speed, "1.25x", true)
+            "eq" -> if (btn.eq) StaticChip(I.Equalizer, "EQ", true)
+            "sleep" -> if (btn.sleep) StaticChip(I.Bedtime, "Sleep")
+        }
+    }
 }

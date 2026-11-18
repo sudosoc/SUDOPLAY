@@ -64,7 +64,7 @@ fun EqStudio(vm: PlayerViewModel, onClose: () -> Unit) {
             }
 
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Spectrum(vm)
+                AnalyzerPanel(vm)
 
                 // ---- scenes
                 Label("Scenes")
@@ -89,6 +89,21 @@ fun EqStudio(vm: PlayerViewModel, onClose: () -> Unit) {
                     FxSlider("Preamp (headroom)", "${fx.preamp / 10f} dB", fx.preamp.toFloat(), -120f..0f, { v -> vm.fxEdit(false) { it.copy(preamp = v.toInt(), preset = "") } }) { vm.fxSave() }
                     FxSlider("Bass boost", "${fx.bass / 10}%", fx.bass.toFloat(), 0f..1000f, { v -> vm.fxEdit(false) { it.copy(bass = v.toInt(), preset = "") } }) { vm.fxSave() }
                     FxSlider("Loudness", "${fx.loud / 10}%", fx.loud.toFloat(), 0f..1000f, { v -> vm.fxEdit(false) { it.copy(loud = v.toInt(), preset = "") } }) { vm.fxSave() }
+                }
+
+                FxCard("Transitions & loudness", I.Tune, null, {}) {
+                    val xf = vm.settings.crossfade.value
+                    FxSlider("Fade between songs", if (xf == 0) "Off" else "$xf s", xf.toFloat(), 0f..12f, { v -> vm.settings.crossfade.set(v.toInt()) }) { vm.applyMisc() }
+                    SubToggle("Even out loudness (ReplayGain)", vm.settings.replayGain.value) { on -> vm.settings.replayGain.set(on); vm.applyMisc() }
+                }
+
+                FxCard("Night mode", I.Tune, fx.compOn, { on -> vm.fxEdit { it.copy(compOn = on, preset = "") } }) {
+                    FxSlider("Squash loud parts", "${fx.compAmt}%", fx.compAmt.toFloat(), 0f..100f, { v -> vm.fxEdit(false) { it.copy(compAmt = v.toInt(), compOn = true, preset = "") } }) { vm.fxSave() }
+                }
+
+                FxCard("Balance & channels", I.Tune, null, {}) {
+                    FxSlider("Balance", when { fx.balance < 0 -> "L ${-fx.balance}%"; fx.balance > 0 -> "R ${fx.balance}%"; else -> "Center" }, fx.balance.toFloat(), -100f..100f, { v -> vm.fxEdit(false) { it.copy(balance = v.toInt(), preset = "") } }) { vm.fxSave() }
+                    SubToggle("Swap left / right", fx.swapCh) { on -> vm.fxEdit { it.copy(swapCh = on, preset = "") } }
                 }
 
                 FxCard("Pitch", I.Tune, null, {}) {
@@ -275,5 +290,94 @@ private fun Spectrum(vm: PlayerViewModel) {
                 )
             }
         }
+    }
+}
+
+
+// ---------------------------------------------------------------------------------------------- analyzer views
+@Composable
+private fun AnalyzerPanel(vm: PlayerViewModel) {
+    var mode by remember { mutableIntStateOf(0) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("Spectrum + EQ", "Spectrogram", "Scope").forEachIndexed { i, n -> Pill(n, mode == i) { mode = i } }
+        }
+        when (mode) {
+            0 -> Spectrum(vm)
+            1 -> Spectrogram()
+            else -> Scope()
+        }
+    }
+}
+
+private const val SG_COLS = 96
+
+/** Scrolling time-frequency heat map: new audio appears on the right and drifts left. Low frequencies at the bottom. */
+@Composable
+private fun Spectrogram() {
+    val t = LocalSudo.current
+    val hist = remember { Array(SG_COLS) { FloatArray(FxBus.BANDS) } }
+    var head by remember { mutableIntStateOf(0) }
+    var frame by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(Unit) {
+        var last = 0L
+        while (true) {
+            withFrameNanos { now ->
+                if (now - last > 30_000_000L) {
+                    last = now
+                    val fresh = android.os.SystemClock.elapsedRealtime() - FxBus.lastUpdate < 350
+                    val src = FxBus.levels
+                    val col = hist[head]
+                    for (i in col.indices) col[i] = if (fresh) src[i] else col[i] * 0.8f
+                    head = (head + 1) % SG_COLS
+                    frame = now
+                }
+            }
+        }
+    }
+    val shape = RoundedCornerShape(24.dp)
+    val cold = t.text.copy(alpha = 0.04f)
+    Canvas(Modifier.fillMaxWidth().height(190.dp).sudoPanel(shape).padding(8.dp)) {
+        @Suppress("UNUSED_EXPRESSION") frame
+        val n = FxBus.BANDS
+        val cw = size.width / SG_COLS
+        val ch = size.height / n
+        for (c in 0 until SG_COLS) {
+            val col = hist[(head + c) % SG_COLS]
+            for (b in 0 until n) {
+                val v = col[b]
+                if (v < 0.06f) continue
+                val color = when {
+                    v < 0.4f -> androidx.compose.ui.graphics.lerp(cold, t.secondary.copy(alpha = 0.8f), v / 0.4f)
+                    v < 0.75f -> androidx.compose.ui.graphics.lerp(t.secondary.copy(alpha = 0.8f), t.primary, (v - 0.4f) / 0.35f)
+                    else -> androidx.compose.ui.graphics.lerp(t.primary, androidx.compose.ui.graphics.Color.White, (v - 0.75f) / 0.25f)
+                }
+                drawRect(color, Offset(c * cw, size.height - (b + 1) * ch), Size(cw + 0.6f, ch + 0.6f))
+            }
+        }
+    }
+}
+
+/** Oscilloscope of the audio leaving the sound engine. */
+@Composable
+private fun Scope() {
+    val t = LocalSudo.current
+    var frame by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(Unit) { while (true) { withFrameNanos { frame = it } } }
+    val shape = RoundedCornerShape(24.dp)
+    Canvas(Modifier.fillMaxWidth().height(190.dp).sudoPanel(shape).padding(8.dp)) {
+        @Suppress("UNUSED_EXPRESSION") frame
+        val fresh = android.os.SystemClock.elapsedRealtime() - FxBus.lastUpdate < 350
+        val s = FxBus.scope
+        val mid = size.height / 2
+        drawLine(t.text.copy(alpha = 0.15f), Offset(0f, mid), Offset(size.width, mid), 1.dp.toPx())
+        val path = Path()
+        for (i in s.indices) {
+            val x = size.width * i / (s.size - 1)
+            val y = mid - (if (fresh) s[i] else 0f).coerceIn(-1f, 1f) * mid * 0.95f
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        drawPath(path, t.primary.copy(alpha = 0.25f), style = Stroke(9.dp.toPx(), cap = StrokeCap.Round))
+        drawPath(path, t.primary, style = Stroke(2.5.dp.toPx(), cap = StrokeCap.Round))
     }
 }

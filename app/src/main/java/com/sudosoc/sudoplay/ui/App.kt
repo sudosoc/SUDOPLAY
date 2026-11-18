@@ -76,7 +76,8 @@ class SheetState(private val scope: CoroutineScope) {
 fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
     val iconStyle = runCatching { IconStyle.valueOf(vm.settings.iconStyle.value) }.getOrDefault(IconStyle.Rounded)
     CompositionLocalProvider(LocalIconStyle provides iconStyle) {
-    SudoPlayTheme(vm.themeId) {
+    val coverArt by rememberArt(vm.current, 64)
+    SudoPlayTheme(vm.themeId, cover = if (vm.settings.coverColors.value) coverArt else null) {
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var detail by remember { mutableStateOf<Detail?>(null) }
         val scope = rememberCoroutineScope()

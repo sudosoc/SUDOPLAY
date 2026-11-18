@@ -27,6 +27,10 @@ data class FxState(
     val echoMs: Int = 320,
     val echoFb: Int = 35,                  // %
     val echoMix: Int = 30,                 // %
+    val balance: Int = 0,                  // -100 (left) .. 100 (right)
+    val swapCh: Boolean = false,
+    val compOn: Boolean = false,           // "night mode" compressor
+    val compAmt: Int = 50,                 // 0..100
     val preset: String = "",
 ) {
     fun toJson(): String = JSONObject().apply {
@@ -35,6 +39,7 @@ data class FxState(
         put("wOn", widthOn); put("w", width)
         put("rOn", reverbOn); put("room", room); put("damp", damp); put("rMix", reverbMix)
         put("eOn", echoOn); put("eMs", echoMs); put("eFb", echoFb); put("eMix", echoMix)
+        put("bal", balance); put("swap", swapCh); put("cOn", compOn); put("cAmt", compAmt)
         put("preset", preset)
     }.toString()
 
@@ -49,6 +54,7 @@ data class FxState(
                 widthOn = o.optBoolean("wOn"), width = o.optInt("w", 100),
                 reverbOn = o.optBoolean("rOn"), room = o.optInt("room", 50), damp = o.optInt("damp", 40), reverbMix = o.optInt("rMix", 25),
                 echoOn = o.optBoolean("eOn"), echoMs = o.optInt("eMs", 320), echoFb = o.optInt("eFb", 35), echoMix = o.optInt("eMix", 30),
+                balance = o.optInt("bal"), swapCh = o.optBoolean("swap"), compOn = o.optBoolean("cOn"), compAmt = o.optInt("cAmt", 50),
                 preset = o.optString("preset", ""),
             )
         }.getOrDefault(FxState())
@@ -72,6 +78,7 @@ object FxScenes {
         FxScene("Night Drive", "Bass + treble") { it.copy(bass = 400, widthOn = true, width = 120, reverbOn = true, room = 35, reverbMix = 12, loud = 250) },
         FxScene("Headphone Space", "Flat") { it.copy(virtOn = true, virt = 700, virtMode = 1, widthOn = true, width = 140, reverbOn = true, room = 30, reverbMix = 15) },
         FxScene("Low Volume", "Late night") { it.copy(loud = 450, preamp = -20) },
+        FxScene("Night Mode", "Late night") { it.copy(compOn = true, compAmt = 70, loud = 200) },
     )
 
     fun apply(scene: FxScene, bands: Int, maxMb: Int): FxState =

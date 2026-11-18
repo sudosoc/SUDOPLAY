@@ -96,6 +96,8 @@ class PlayerButtons(
     val shuffle: Boolean = true, val prev: Boolean = true, val next: Boolean = true, val repeat: Boolean = true,
     val fav: Boolean = true, val playlist: Boolean = true, val lyrics: Boolean = true, val queue: Boolean = true,
     val speed: Boolean = true, val eq: Boolean = true, val sleep: Boolean = true, val ab: Boolean = true,
+    val top: List<String> = ButtonOrder.top, val title: List<String> = ButtonOrder.title,
+    val transport: List<String> = ButtonOrder.transport, val chips: List<String> = ButtonOrder.chips,
 ) {
     val anyChip get() = speed || eq || sleep
 }
@@ -103,6 +105,8 @@ class PlayerButtons(
 fun playerButtons(s: AppSettings) = PlayerButtons(
     s.btnShuffle.value, s.btnPrev.value, s.btnNext.value, s.btnRepeat.value, s.btnFav.value, s.btnPlaylist.value,
     s.btnLyrics.value, s.btnQueue.value, s.btnSpeed.value, s.btnEq.value, s.btnSleep.value, s.btnAb.value,
+    ButtonOrder.parse(s.orderTop.value, ButtonOrder.top), ButtonOrder.parse(s.orderTitle.value, ButtonOrder.title),
+    ButtonOrder.parse(s.orderTransport.value, ButtonOrder.transport), ButtonOrder.parse(s.orderChips.value, ButtonOrder.chips),
 )
 
 @Immutable
@@ -124,7 +128,7 @@ fun NowPlayingScreen(vm: PlayerViewModel, sheet: SheetState) {
     val app = LocalSudo.current
     val pt = PlayerThemes.byId(vm.settings.playerTheme.value)
     val eff = remember(app, pt) { effectiveTheme(app, pt) }
-    CompositionLocalProvider(LocalSudo provides eff) {
+    CompositionLocalProvider(LocalSudo provides eff, LocalWave provides vm.wave) {
         PlayerContent(vm, pt, sheet)
     }
 }
@@ -163,18 +167,39 @@ private fun PlayerContent(vm: PlayerViewModel, pt: PlayerTheme, sheet: SheetStat
     fun flash(i: ImageVector, dir: Int = 0) { if (s.gestureIcon.value) hud = HudEvent(++hudId, i, dir) }
 
     val icPlay = I.PlayArrow; val icPause = I.Pause; val icNext = I.SkipNext; val icPrev = I.SkipPrevious
+    val icFav = I.Favorite; val icShuffle = I.Shuffle; val icRepeat = I.Repeat; val icLyrics = I.Lyrics
+    val icQueue = I.QueueMusic; val icEq = I.Equalizer; val icClose = I.KeyboardArrowDown; val icSpeed = I.Speed
+
+    fun perform(id: String) {
+        when (id) {
+            "playpause" -> { val willPlay = !vm.isPlaying; vm.togglePlay(); vm.haptics.click(); flash(if (willPlay) icPlay else icPause) }
+            "next" -> { vm.next(); vm.haptics.click(); flash(icNext, 1) }
+            "prev" -> { vm.previous(); vm.haptics.click(); flash(icPrev, -1) }
+            "back10" -> { vm.seekTo((vm.position - 10_000L).coerceAtLeast(0L)); vm.haptics.click(); flash(icPrev, -1) }
+            "fwd10" -> { vm.seekTo((vm.position + 10_000L).coerceAtMost(vm.duration)); vm.haptics.click(); flash(icNext, 1) }
+            "fav" -> song?.let { vm.store.toggleFav(it.id); vm.haptics.click(); flash(icFav) }
+            "shuffle" -> { vm.toggleShuffle(); vm.haptics.click(); flash(icShuffle) }
+            "repeat" -> { vm.cycleRepeat(); vm.haptics.click(); flash(icRepeat) }
+            "speed" -> { vm.changeSpeedTo(if (abs(vm.speed - 1f) < 0.01f) s.lastSpeedPct.value / 100f else 1f); vm.haptics.click(); flash(icSpeed) }
+            "lyrics" -> { mode = if (mode == 1) 0 else 1; vm.haptics.click(); flash(icLyrics) }
+            "queue" -> { mode = if (mode == 2) 0 else 2; vm.haptics.click(); flash(icQueue) }
+            "eq" -> { showEq = true; vm.haptics.click() }
+            "ab" -> vm.abCycle()
+            "cover" -> song?.let { coverFor = it }
+            "carmode" -> { vm.carMode = true; sheet.close() }
+            "close" -> { vm.haptics.tick(); sheet.close() }
+        }
+    }
 
     val gestures = Modifier.playerGestures(
-        doubleTap = s.doubleTap.value, swipe = s.swipe.value, invert = s.swipeInvert.value, scrub = s.scrub.value,
+        doubleTap = s.doubleTap.value, swipe = s.swipe.value, scrub = s.scrub.value,
+        hasUp = s.gSwU.value != "none", hasTwo = s.gTwo.value != "none",
         artBounds = { artRect },
-        onDoubleTap = {
-            val willPlay = !vm.isPlaying
-            vm.togglePlay(); vm.haptics.click()
-            flash(if (willPlay) icPlay else icPause)
-        },
-        onNext = { vm.next(); vm.haptics.click(); flash(icNext, 1) },
-        onPrev = { vm.previous(); vm.haptics.click(); flash(icPrev, -1) },
-        onLongPressArt = { song?.let { coverFor = it } },
+        onDoubleTap = { zone -> perform(when (zone) { 0 -> s.gDtL.value; 2 -> s.gDtR.value; else -> s.gDtC.value }) },
+        onSwipe = { right -> perform(if (right) s.gSwR.value else s.gSwL.value) },
+        onSwipeUp = { perform(s.gSwU.value) },
+        onTwoFinger = { perform(s.gTwo.value) },
+        onLongPressRelease = { onArt -> val a = s.gLp.value; if (a == "cover") { if (onArt) perform(a) } else if (a != "none") perform(a) },
         onLongPressStart = { vm.haptics.heavy() },
         onScrubStart = { scrubBase = vm.position; vm.haptics.heavy() },
         onScrub = { fraction ->
@@ -224,9 +249,13 @@ private fun PlayerContent(vm: PlayerViewModel, pt: PlayerTheme, sheet: SheetStat
                 abSlot = { AbButton(vm) },
                 middle = middle,
                 extras = {
-                    if (btn.speed) SpeedChip(vm)
-                    if (btn.eq) EqChip(vm) { showEq = true }
-                    if (btn.sleep) SleepChip(vm)
+                    btn.chips.forEach { id ->
+                        when (id) {
+                            "speed" -> if (btn.speed) SpeedChip(vm)
+                            "eq" -> if (btn.eq) EqChip(vm) { showEq = true }
+                            "sleep" -> if (btn.sleep) SleepChip(vm)
+                        }
+                    }
                 },
                 modifier = Modifier.systemBarsPadding().graphicsLayer {
                     val w = size.width
@@ -282,11 +311,12 @@ fun PlayerLayout(
                 when (mode) { 1 -> "Lyrics"; 2 -> "Queue"; else -> "Now playing" }, color = t.text.copy(alpha = 0.8f),
                 modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
             )
-            if (btn.lyrics) IconButton(onClick = act.onLyrics) { Icon(I.Lyrics, null, tint = if (mode == 1) t.primary else t.text) }
-            else if (btn.queue) Spacer(Modifier.size(48.dp))
-            if (btn.queue) IconButton(onClick = act.onQueue) { Icon(I.QueueMusic, null, tint = if (mode == 2) t.primary else t.text) }
-            else if (btn.lyrics) Spacer(Modifier.size(48.dp))
-            if (!btn.lyrics && !btn.queue) Spacer(Modifier.size(48.dp))
+            val topShown = btn.top.filter { (it == "lyrics" && btn.lyrics) || (it == "queue" && btn.queue) }
+            topShown.forEach { id ->
+                if (id == "lyrics") IconButton(onClick = act.onLyrics) { Icon(I.Lyrics, null, tint = if (mode == 1) t.primary else t.text) }
+                else IconButton(onClick = act.onQueue) { Icon(I.QueueMusic, null, tint = if (mode == 2) t.primary else t.text) }
+            }
+            repeat(2 - topShown.size) { Spacer(Modifier.size(48.dp)) }
         }
 
         // ---- art / lyrics / queue
@@ -310,10 +340,12 @@ fun PlayerLayout(
                 Text(snap.title, color = t.text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(snap.artist, color = t.text.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (btn.fav) IconButton(onClick = act.onFav) {
-                Icon(if (snap.fav) I.Favorite else I.FavoriteBorder, null, tint = if (snap.fav) t.primary else t.text)
+            btn.title.forEach { id ->
+                if (id == "fav" && btn.fav) IconButton(onClick = act.onFav) {
+                    Icon(if (snap.fav) I.Favorite else I.FavoriteBorder, null, tint = if (snap.fav) t.primary else t.text)
+                }
+                if (id == "add" && btn.playlist) IconButton(onClick = act.onAdd) { Icon(I.Add, null, tint = t.text) }
             }
-            if (btn.playlist) IconButton(onClick = act.onAdd) { Icon(I.Add, null, tint = t.text) }
         }
 
         // ---- seek bar
@@ -332,15 +364,19 @@ fun PlayerLayout(
 
         // ---- transport
         Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            if (btn.shuffle) IconButton(onClick = act.onShuffle) { Icon(I.Shuffle, null, tint = if (snap.shuffle) t.primary else t.text.copy(alpha = 0.7f)) }
-            if (btn.prev) IconButton(onClick = act.onPrev) { Icon(I.SkipPrevious, null, tint = t.text, modifier = Modifier.size(38.dp)) }
-            PlayButton(pt, snap.playing, act.onPlay)
-            if (btn.next) IconButton(onClick = act.onNext) { Icon(I.SkipNext, null, tint = t.text, modifier = Modifier.size(38.dp)) }
-            if (btn.repeat) IconButton(onClick = act.onRepeat) {
-                Icon(
-                    if (snap.repeat == Player.REPEAT_MODE_ONE) I.RepeatOne else I.Repeat, null,
-                    tint = if (snap.repeat == Player.REPEAT_MODE_OFF) t.text.copy(alpha = 0.7f) else t.primary,
-                )
+            btn.transport.forEach { id ->
+                when (id) {
+                    "shuffle" -> if (btn.shuffle) IconButton(onClick = act.onShuffle) { Icon(I.Shuffle, null, tint = if (snap.shuffle) t.primary else t.text.copy(alpha = 0.7f)) }
+                    "prev" -> if (btn.prev) IconButton(onClick = act.onPrev) { Icon(I.SkipPrevious, null, tint = t.text, modifier = Modifier.size(38.dp)) }
+                    "play" -> PlayButton(pt, snap.playing, act.onPlay)
+                    "next" -> if (btn.next) IconButton(onClick = act.onNext) { Icon(I.SkipNext, null, tint = t.text, modifier = Modifier.size(38.dp)) }
+                    "repeat" -> if (btn.repeat) IconButton(onClick = act.onRepeat) {
+                        Icon(
+                            if (snap.repeat == Player.REPEAT_MODE_ONE) I.RepeatOne else I.Repeat, null,
+                            tint = if (snap.repeat == Player.REPEAT_MODE_OFF) t.text.copy(alpha = 0.7f) else t.primary,
+                        )
+                    }
+                }
             }
         }
 
@@ -360,18 +396,19 @@ fun PlayerLayout(
  */
 @Composable
 private fun Modifier.playerGestures(
-    doubleTap: Boolean, swipe: Boolean, invert: Boolean, scrub: Boolean,
+    doubleTap: Boolean, swipe: Boolean, scrub: Boolean, hasUp: Boolean, hasTwo: Boolean,
     artBounds: () -> Rect?,
-    onDoubleTap: () -> Unit, onNext: () -> Unit, onPrev: () -> Unit,
-    onLongPressArt: () -> Unit, onLongPressStart: () -> Unit,
+    onDoubleTap: (Int) -> Unit, onSwipe: (Boolean) -> Unit, onSwipeUp: () -> Unit, onTwoFinger: () -> Unit,
+    onLongPressRelease: (Boolean) -> Unit, onLongPressStart: () -> Unit,
     onScrubStart: () -> Unit, onScrub: (Float) -> Unit, onScrubEnd: () -> Unit,
     onStretch: (Float, Boolean) -> Unit,
     onSheetStart: () -> Unit, onSheetDrag: (Float) -> Unit, onSheetSettle: (Float) -> Unit,
 ): Modifier {
     val cbDouble by rememberUpdatedState(onDoubleTap)
-    val cbNext by rememberUpdatedState(onNext)
-    val cbPrev by rememberUpdatedState(onPrev)
-    val cbArt by rememberUpdatedState(onLongPressArt)
+    val cbSwipe by rememberUpdatedState(onSwipe)
+    val cbUp by rememberUpdatedState(onSwipeUp)
+    val cbTwo by rememberUpdatedState(onTwoFinger)
+    val cbArt by rememberUpdatedState(onLongPressRelease)
     val cbLong by rememberUpdatedState(onLongPressStart)
     val cbScrubStart by rememberUpdatedState(onScrubStart)
     val cbScrub by rememberUpdatedState(onScrub)
@@ -382,7 +419,7 @@ private fun Modifier.playerGestures(
     val cbSheetSettle by rememberUpdatedState(onSheetSettle)
     val bounds by rememberUpdatedState(artBounds)
 
-    return pointerInput(doubleTap, swipe, invert, scrub) {
+    return pointerInput(doubleTap, swipe, scrub, hasUp, hasTwo) {
         var lastTapTime = 0L
         var lastTapPos = Offset.Zero
         awaitEachGesture {
@@ -395,6 +432,7 @@ private fun Modifier.playerGestures(
             val first = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                 while (true) {
                     val ev = awaitPointerEvent()
+                    if (hasTwo && ev.changes.count { it.pressed } >= 2) return@withTimeoutOrNull "two"
                     val ch = ev.changes.firstOrNull { it.id == down.id } ?: return@withTimeoutOrNull "cancel"
                     if (ch.isConsumed) return@withTimeoutOrNull "cancel"
                     if (!ch.pressed) { upChange = ch; return@withTimeoutOrNull "up" }
@@ -405,6 +443,18 @@ private fun Modifier.playerGestures(
 
             when (first) {
                 "cancel" -> return@awaitEachGesture
+                "two" -> {
+                    var moved = false
+                    val done = withTimeoutOrNull(700L) {
+                        while (true) {
+                            val ev = awaitPointerEvent()
+                            if (ev.changes.all { !it.pressed }) return@withTimeoutOrNull true
+                            if (ev.changes.any { (it.position - it.previousPosition).getDistance() > slop * 2 }) moved = true
+                        }
+                        @Suppress("UNREACHABLE_CODE") false
+                    }
+                    if (done == true && !moved) cbTwo()
+                }
                 "up" -> {
                     val up = upChange ?: return@awaitEachGesture
                     if (up.isConsumed || !doubleTap) { lastTapTime = 0L; return@awaitEachGesture }
@@ -413,7 +463,7 @@ private fun Modifier.playerGestures(
                         (up.position - lastTapPos).getDistance() < 120.dp.toPx()
                     ) {
                         lastTapTime = 0L
-                        cbDouble()
+                        cbDouble((up.position.x / size.width.toFloat() * 3f).toInt().coerceIn(0, 2))
                     } else {
                         lastTapTime = now; lastTapPos = up.position
                     }
@@ -426,7 +476,20 @@ private fun Modifier.playerGestures(
                     var accY = 0f
                     val vt = VelocityTracker()
                     if (!horizontal) {
-                        if (total.y <= 0f) return@awaitEachGesture   // upward drags belong to the lists / nobody
+                        if (total.y <= 0f) {   // upward drags belong to the lists, unless the user bound a swipe-up action
+                            if (hasUp) {
+                                var tot = total
+                                while (true) {
+                                    val ev = awaitPointerEvent()
+                                    val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                                    if (ch.isConsumed) return@awaitEachGesture
+                                    tot += ch.positionChange()
+                                    if (!ch.pressed) break
+                                }
+                                if (-tot.y > 72.dp.toPx() && -tot.y > abs(tot.x) * 1.2f) cbUp()
+                            }
+                            return@awaitEachGesture
+                        }
                         sheetMode = true
                         cbSheetStart(); cbSheetDrag(total.y); accY = total.y
                         vt.addPosition(down.uptimeMillis, Offset.Zero)
@@ -451,10 +514,7 @@ private fun Modifier.playerGestures(
                         cbSheetSettle(vt.calculateVelocity().y)
                     } else if (horizontal) {
                         cbStretch(0f, false)
-                        if (swipe && abs(total.x) > 72.dp.toPx()) {
-                            val toRight = total.x > 0
-                            if (toRight != invert) cbNext() else cbPrev()
-                        }
+                        if (swipe && abs(total.x) > 72.dp.toPx()) cbSwipe(total.x > 0)
                     }
                 }
                 else -> { // long press
@@ -470,7 +530,7 @@ private fun Modifier.playerGestures(
                         if (scrubbing) { cbScrub(dx / size.width); cbStretch(dx, true); ch.consume() }
                         if (!ch.pressed) break
                     }
-                    if (scrubbing) { cbScrubEnd(); cbStretch(0f, false) } else if (onArt) cbArt()
+                    if (scrubbing) { cbScrubEnd(); cbStretch(0f, false) } else cbArt(onArt)
                 }
             }
         }
