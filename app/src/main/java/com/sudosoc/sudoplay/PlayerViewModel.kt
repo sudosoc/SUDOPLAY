@@ -176,14 +176,39 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val onlineSongs = HashMap<Long, Song>()
     var onlineBusy by mutableStateOf<String?>(null); private set
     var onlineError by mutableStateOf<String?>(null)
+    var onlineNote by mutableStateOf<String?>(null)
+    /** What each online song was found as (so a failed YouTube stream can be retried elsewhere, and so it can be downloaded). */
+    val onlineOrigin = HashMap<Long, com.sudosoc.sudoplay.online.OnlineItem>()
+    /** Download dialog request, shown on top of everything: (items, group name for a new playlist). */
+    var dlRequest by mutableStateOf<Pair<List<com.sudosoc.sudoplay.online.OnlineItem>, String>?>(null)
+    /** "Find this song online": the Online tab picks this up, searches it, and clears it. */
+    var onlineQuery by mutableStateOf<String?>(null)
+    var wantTab by mutableStateOf<Int?>(null)
+    fun findOnline(song: Song) { onlineQuery = (song.title + " " + song.artist.takeIf { !it.equals("<unknown>", true) }.orEmpty()).trim(); wantTab = 5 }
+    private val favPrefs get() = (prefs.getString("fav_sheikhs", "") ?: "").split("\n").filter { it.contains('\t') }
+    var favSheikhs by mutableStateOf(favPrefs.map { it.substringBefore('\t') to it.substringAfter('\t') })
+    fun toggleSheikh(name: String, key: String) {
+        favSheikhs = if (favSheikhs.any { it.second == key }) favSheikhs.filter { it.second != key } else favSheikhs + (name to key)
+        prefs.edit().putString("fav_sheikhs", favSheikhs.joinToString("\n") { it.first + "\t" + it.second }).apply()
+    }
     /** mode 0 = play now, 1 = play next, 2 = add to queue */
-    fun playOnline(item: com.sudosoc.sudoplay.online.OnlineItem, mode: Int = 0) {
+    fun playOnline(item: com.sudosoc.sudoplay.online.OnlineItem, mode: Int = 0, fallbackTried: Boolean = false) {
         if (onlineBusy != null) return
-        onlineBusy = item.url; onlineError = null
+        onlineBusy = item.url; onlineError = null; onlineNote = null
         viewModelScope.launch {
             try {
-                val s = com.sudosoc.sudoplay.online.Online.resolve(item)
+                val s = try {
+                    com.sudosoc.sudoplay.online.Online.resolve(item)
+                } catch (e: Throwable) {
+                    // YouTube often refuses: look for the same song on SoundCloud / Audius instead
+                    val alt = if (item.kind == com.sudosoc.sudoplay.online.OnlineKind.YouTube && !fallbackTried) com.sudosoc.sudoplay.online.Online.alternative(item) else null
+                    if (alt == null) throw e
+                    onlineNote = "YouTube would not give the audio, so this is the ${alt.kind.label} version"
+                    onlineOrigin[com.sudosoc.sudoplay.online.Online.idFor(alt.url)] = alt
+                    com.sudosoc.sudoplay.online.Online.resolve(alt)
+                }
                 onlineSongs[s.id] = s
+                onlineOrigin.putIfAbsent(s.id, item)
                 val c = controller
                 if (mode == 0 || c == null || c.mediaItemCount == 0) play(listOf(s), 0)
                 else if (mode == 1) c.addMediaItem(c.currentMediaItemIndex + 1, toItem(s))
@@ -340,6 +365,16 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             val cur = current
             if (cur?.online == true) {
                 val http403 = (error.cause as? androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)?.responseCode
+                val origin = onlineOrigin[cur.id]
+                if (origin != null && origin.kind == com.sudosoc.sudoplay.online.OnlineKind.YouTube && onlineBusy == null) {
+                    // the stream URL resolved but the server refused it: try the same song elsewhere
+                    viewModelScope.launch {
+                        val alt = com.sudosoc.sudoplay.online.Online.alternative(origin)
+                        if (alt != null) { onlineNote = "YouTube refused the stream — playing the ${alt.kind.label} version"; playOnline(alt, 0, true) }
+                        else onlineError = "YouTube refused this stream (HTTP ${http403 ?: "error"}) and no other source has it."
+                    }
+                    return
+                }
                 onlineError = when {
                     http403 == 403 || http403 == 410 -> "The source refused this stream (HTTP $http403). YouTube does this often — try SoundCloud or radio, or search again later."
                     else -> "Playback failed: ${error.errorCodeName}"

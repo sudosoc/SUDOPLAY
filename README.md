@@ -84,3 +84,12 @@ New **Online** tab (can be hidden from Appearance → Navigation bar):
 - **Archive**: archive.org audio search; an item opens its tracks.
 - **Downloads**: pick the quality (every format/bitrate the source offers), optionally put the file in a playlist (existing or new) — or "Download all" for a whole reciter/album. Saved to Music/SUDOPLAY (shows up in the library), 2 at a time, with a foreground notification, progress list and cancel. SoundCloud HLS is stitched into a normal .m4a.
 - Unit tests for the Quran search against a copy of the real directory.
+
+## v0.10 — more sources, source filters, smarter results
+
+- **Sources list**: "Sources n/6" opens a checklist (Quran, YouTube, SoundCloud, Audius, Archive, Radio); tap a chip to switch a source on/off, hold a chip to search only that one. Saved between launches. Radio is off by default (noisy for song searches).
+- **Audius** added (open network, full-length tracks, no key).
+- **Top matches**: the best hit of every source side by side, duplicates removed; each source keeps its own section with "Only <source>".
+- **YouTube fallback**: if YouTube refuses a stream (it often blocks anonymous access), the same song is looked up on SoundCloud / Audius (title+artist+length matching) and played from there, with a note saying so.
+- **Search suggestions** (opt-in, off by default — it sends the typed text to Google's suggest service; shown in the Network log).
+- **Find online** on any library song, **Download** action for the playing online song (gesture/button action), **favorite sheikhs** on the Online page, Quran radio shortcut.

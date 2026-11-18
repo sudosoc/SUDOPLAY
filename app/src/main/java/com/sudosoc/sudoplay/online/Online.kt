@@ -21,9 +21,9 @@ import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.util.concurrent.TimeUnit
 
 enum class OnlineKind(val label: String) {
-    Quran("Quran"), SoundCloud("SoundCloud"), YouTube("YouTube"), Archive("Archive"), Radio("Radio"), Link("Link");
+    Quran("Quran"), YouTube("YouTube"), SoundCloud("SoundCloud"), Audius("Audius"), Archive("Archive"), Radio("Radio"), Link("Link");
     /** true when [OnlineItem.url] already is the audio file (no extractor needed). */
-    val direct get() = this == Quran || this == Archive || this == Radio || this == Link
+    val direct get() = this == Quran || this == Archive || this == Radio || this == Link || this == Audius
 }
 
 /**
@@ -94,6 +94,7 @@ object Online {
             }
             OnlineKind.Quran -> Quran.search(appCtx, query)
             OnlineKind.Archive -> archiveSearch(query)
+            OnlineKind.Audius -> audiusSearch(query)
             OnlineKind.Link -> emptyList()
         }
     }
@@ -106,6 +107,37 @@ object Online {
             key.startsWith("a:") -> archiveFiles(key.removePrefix("a:"), item.title)
             else -> emptyList()
         }
+    }
+
+    // ---------------- Audius (open music network: full-length tracks, no key) ----------------
+    private fun audiusSearch(q: String): List<OnlineItem> {
+        val body = getJson("https://api.audius.co/v1/tracks/search?query=${Uri.encode(q)}&app_name=SUDOPLAY&limit=20")
+        val a = org.json.JSONObject(body).optJSONArray("data") ?: return emptyList()
+        return (0 until a.length()).map { a.getJSONObject(it) }.filter { it.optBoolean("is_streamable", true) }.map {
+            val id = it.optString("id")
+            OnlineItem(
+                OnlineKind.Audius, it.optString("title"), it.optJSONObject("user")?.optString("name").orEmpty(),
+                it.optJSONObject("artwork")?.optString("150x150")?.takeIf { u -> u.startsWith("http") }, it.optLong("duration"),
+                "https://api.audius.co/v1/tracks/$id/stream?app_name=SUDOPLAY",
+            )
+        }
+    }
+
+    // ---------------- "same song, another source" ----------------
+    suspend fun alternative(item: OnlineItem): OnlineItem? = withContext(Dispatchers.IO) {
+        val q = com.sudosoc.sudoplay.online.OnlineMatch.tokens(item.title + " " + item.subtitle).take(8).joinToString(" ")
+        if (q.isBlank()) return@withContext null
+        val cands = listOf(OnlineKind.SoundCloud, OnlineKind.Audius).flatMap { k -> runCatching { search(k, q) }.getOrDefault(emptyList()) }
+        OnlineMatch.best(item.title, item.subtitle, item.durationSec, cands)
+    }
+
+    // ---------------- search-as-you-type suggestions (opt-in: sends the partial text to Google's suggest endpoint) ----------------
+    suspend fun suggest(q: String): List<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = getJson("https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q=${Uri.encode(q)}")
+            val arr = org.json.JSONArray(body).getJSONArray(1)
+            (0 until arr.length()).map { arr.getString(it) }.take(6)
+        }.getOrDefault(emptyList())
     }
 
     // ---------------- archive.org (free audio library, no key) ----------------
@@ -184,7 +216,7 @@ object Online {
     suspend fun resolve(item: OnlineItem): Song = withContext(Dispatchers.IO) {
         val id = idFor(item.url)
         when (item.kind) {
-            OnlineKind.Radio, OnlineKind.Link, OnlineKind.Quran, OnlineKind.Archive ->
+            OnlineKind.Radio, OnlineKind.Link, OnlineKind.Quran, OnlineKind.Archive, OnlineKind.Audius ->
                 song(id, item.title, item.subtitle.ifBlank { if (item.kind == OnlineKind.Radio) "Radio" else "Stream" }, item.url, item.thumb, item.durationSec * 1000)
             else -> {
                 init()

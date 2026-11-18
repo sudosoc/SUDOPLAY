@@ -64,7 +64,7 @@ object DownloadCenter {
     suspend fun options(item: OnlineItem): List<DlOption> = withContext(Dispatchers.IO) {
         when (item.kind) {
             OnlineKind.Radio -> emptyList()                       // a live stream has no end
-            OnlineKind.Quran, OnlineKind.Archive, OnlineKind.Link -> {
+            OnlineKind.Quran, OnlineKind.Archive, OnlineKind.Link, OnlineKind.Audius -> {
                 val ext = item.url.substringBefore('?').substringAfterLast('.', "mp3").lowercase().let { if (it.length in 2..4) it else "mp3" }
                 listOf(DlOption("Original file (${ext.uppercase()})", item.url, ext, item.url.contains(".m3u8")))
             }

@@ -81,6 +81,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
     SudoPlayTheme(vm.themeId, cover = if (vm.settings.coverColors.value) coverArt else null) {
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var detail by remember { mutableStateOf<Detail?>(null) }
+        LaunchedEffect(vm.wantTab) { vm.wantTab?.let { w -> if (w == 5) vm.settings.navOnline.set(true); tab = w; detail = null; vm.wantTab = null } }
         val scope = rememberCoroutineScope()
         val sheet = remember { SheetState(scope) }
         val cfg = androidx.compose.ui.platform.LocalConfiguration.current
@@ -141,6 +142,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                 }
                 BackHandler(enabled = sheet.isOpen) { sheet.close() }
                 if (vm.carMode) CarScreen(vm) { vm.carMode = false }
+                vm.dlRequest?.let { (items, name) -> DownloadDialog(vm, items, name) { vm.dlRequest = null } }
                 vm.infoSong?.let { SongInfoDialog(vm, it) { vm.infoSong = null } }
                 vm.clipSong?.let { ClipScreen(vm, it) { vm.clipSong = null } }
             }

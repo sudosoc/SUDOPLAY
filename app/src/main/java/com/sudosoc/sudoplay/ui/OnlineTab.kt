@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -40,7 +41,8 @@ import kotlinx.coroutines.withContext
 
 private class SourceState(val items: List<OnlineItem> = emptyList(), val error: String? = null, val loading: Boolean = false)
 
-private val ALL_SOURCES = listOf(OnlineKind.Quran, OnlineKind.SoundCloud, OnlineKind.YouTube, OnlineKind.Archive, OnlineKind.Radio)
+private val ALL_SOURCES = listOf(OnlineKind.Quran, OnlineKind.YouTube, OnlineKind.SoundCloud, OnlineKind.Audius, OnlineKind.Archive, OnlineKind.Radio)
+private val DEFAULT_ON = setOf(OnlineKind.Quran, OnlineKind.YouTube, OnlineKind.SoundCloud, OnlineKind.Audius, OnlineKind.Archive)   // radio is noisy for song searches
 
 /** One search box for everything: type a song, a sheikh, a surah — or paste a link. */
 @Composable
@@ -52,20 +54,27 @@ fun OnlineTab(vm: PlayerViewModel) {
     val prefs = remember { ctx.getSharedPreferences("sudoplay", android.content.Context.MODE_PRIVATE) }
 
     var query by rememberSaveable { mutableStateOf("") }
-    var filter by rememberSaveable { mutableIntStateOf(0) }                 // 0 = all sources
+    var enabled by remember {
+        mutableStateOf(
+            prefs.getString("online_src", null)?.split(",")?.mapNotNull { n -> ALL_SOURCES.firstOrNull { it.name == n } }?.toSet()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ON
+        )
+    }
+    fun setEnabled(v: Set<OnlineKind>) { enabled = v; prefs.edit().putString("online_src", v.joinToString(",") { it.name }).apply() }
+    var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
+    var suggestOn by remember { mutableStateOf(prefs.getBoolean("online_suggest", false)) }
+    var showFilters by remember { mutableStateOf(false) }
     val results = remember { mutableStateMapOf<OnlineKind, SourceState>() }
     var searched by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf((prefs.getString("online_hist", "") ?: "").split("\n").filter { it.isNotBlank() }) }
     val stack = remember { mutableStateListOf<OnlineItem>() }               // opened collections (reciter → mushaf …)
-    var dlTarget by remember { mutableStateOf<Pair<List<OnlineItem>, String>?>(null) }
     var showDownloads by remember { mutableStateOf(false) }
     var searchJobs by remember { mutableStateOf<List<kotlinx.coroutines.Job>>(emptyList()) }
 
     BackHandler(enabled = stack.isNotEmpty()) { stack.removeAt(stack.lastIndex) }
 
     fun runSearch(q0: String = query) {
-        val q = q0.trim(); if (q.isEmpty() && filter != 5) return
-        query = q; kb?.hide()
+        val q = q0.trim(); if (q.isEmpty() && enabled != setOf(OnlineKind.Radio)) return
+        query = q; kb?.hide(); suggestions = emptyList()
         if (q.isNotEmpty()) {
             history = (listOf(q) + history.filter { it != q }).take(12)
             prefs.edit().putString("online_hist", history.joinToString("\n")).apply()
@@ -82,7 +91,8 @@ fun OnlineTab(vm: PlayerViewModel) {
         vm.onlineError = null
         searchJobs.forEach { it.cancel() }
         results.clear(); searched = true
-        val kinds = if (filter == 0) ALL_SOURCES else listOf(ALL_SOURCES[filter - 1])
+        val kinds = ALL_SOURCES.filter { it in enabled }
+        if (kinds.isEmpty()) { vm.onlineError = "Every source is switched off — pick at least one in Sources"; searched = false; return }
         kinds.forEach { results[it] = SourceState(loading = true) }
         searchJobs = kinds.map { k ->
             scope.launch {
@@ -90,12 +100,21 @@ fun OnlineTab(vm: PlayerViewModel) {
             }
         }
     }
-    // switching the source chip re-runs the current search (radio opens on the most popular stations)
-    LaunchedEffect(filter) { if (searched || filter == 5) runSearch() }
+    // changing which sources are on re-runs the current search (radio alone opens on the most popular stations)
+    LaunchedEffect(enabled) { if (searched || enabled == setOf(OnlineKind.Radio)) runSearch() }
+    // "Find online" from a library song
+    LaunchedEffect(vm.onlineQuery) { vm.onlineQuery?.let { q -> vm.onlineQuery = null; query = q; runSearch(q) } }
+    // search-as-you-type (opt-in)
+    LaunchedEffect(query, suggestOn) {
+        suggestions = emptyList()
+        if (!suggestOn || query.trim().length < 2 || Online.isLink(query)) return@LaunchedEffect
+        kotlinx.coroutines.delay(300)
+        suggestions = Online.suggest(query.trim())
+    }
 
     val detail = stack.lastOrNull()
     if (detail != null) {
-        CollectionScreen(vm, detail, onBack = { stack.removeAt(stack.lastIndex) }, onOpen = { stack.add(it) }, onDownload = { items, name -> dlTarget = items to name })
+        CollectionScreen(vm, detail, onBack = { stack.removeAt(stack.lastIndex) }, onOpen = { stack.add(it) }, onDownload = { items, name -> vm.dlRequest = items to name })
     } else Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) { ScreenTitle("Online") }
@@ -117,11 +136,19 @@ fun OnlineTab(vm: PlayerViewModel) {
             colors = OutlinedTextFieldDefaults.colors(focusedTextColor = t.text, unfocusedTextColor = t.text, focusedBorderColor = t.primary, unfocusedBorderColor = t.text.copy(alpha = 0.3f), cursorColor = t.primary),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
         )
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OnlinePill("All", filter == 0) { filter = 0 }
-            ALL_SOURCES.forEachIndexed { i, k -> OnlinePill(k.label, filter == i + 1) { filter = i + 1 } }
+        if (suggestions.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+            suggestions.forEach { sg -> Text(sg, color = t.text, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().clickable { runSearch(sg) }.padding(vertical = 9.dp, horizontal = 6.dp)) }
+        }
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OnlinePill("Sources ${enabled.size}/${ALL_SOURCES.size} ▾", false) { showFilters = true }
+            // tap = switch a source on/off, hold = search only that one
+            ALL_SOURCES.forEach { k ->
+                val on = k in enabled
+                OnlinePill(k.label, on, onLong = { setEnabled(setOf(k)) }) { setEnabled(if (on && enabled.size > 1) enabled - k else enabled + k) }
+            }
         }
         vm.onlineError?.let { Text(it, color = t.text, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+        vm.onlineNote?.let { Text(it, color = t.primary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) }
 
         if (!searched) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -132,25 +159,49 @@ fun OnlineTab(vm: PlayerViewModel) {
                     }
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { history.forEach { h -> OnlinePill(h, false) { runSearch(h) } } }
                 }
+                if (vm.favSheikhs.isNotEmpty()) {
+                    Text("Favorite sheikhs", color = t.text, fontWeight = FontWeight.Bold)
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        vm.favSheikhs.forEach { (name, key) -> OnlinePill("★ $name", false) { stack.add(OnlineItem(OnlineKind.Quran, name, "", null, 0, "", key)) } }
+                    }
+                }
                 Text("Try", color = t.text, fontWeight = FontWeight.Bold)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("العفاسي", "سورة الكهف", "عبد الباسط", "ماهر المعيقلي سورة البقرة", "lofi").forEach { s -> OnlinePill(s, false) { runSearch(s) } }
+                    OnlinePill("إذاعة القرآن", false) { setEnabled(setOf(OnlineKind.Radio)); runSearch("quran") }
                 }
                 Text(
-                    "One search over the Quran library (every sheikh and surah), SoundCloud, YouTube, archive.org and radio. Paste a YouTube / SoundCloud / archive.org page or any direct audio link in the same box. No account, no API key.",
+                    "One search over the Quran library (every sheikh and surah), YouTube, SoundCloud, Audius, archive.org and radio — switch any of them off with Sources. If YouTube refuses a stream, the same song is looked up on SoundCloud / Audius automatically. Paste a YouTube / SoundCloud / archive.org page or any direct audio link in the same box. No account, no API key.",
                     color = t.text.copy(alpha = 0.55f), fontSize = 12.sp,
                 )
             }
         } else {
             val shown = ALL_SOURCES.filter { results[it] != null }
+            val multi = shown.size > 1
+            // "Top matches": the best hit of each source side by side, so the song you meant is near the top whatever the source
+            val top: List<OnlineItem> = if (!multi) emptyList() else {
+                val seen = HashSet<String>(); val out = ArrayList<OnlineItem>()
+                val lists = shown.mapNotNull { k -> results[k]?.items?.filter { it.collection == null } }
+                var round = 0
+                while (out.size < 8 && lists.any { round < it.size } && round < 3) {
+                    lists.forEach { l -> l.getOrNull(round)?.let { if (out.size < 8 && seen.add(OnlineMatchKey.of(it))) out.add(it) } }
+                    round++
+                }
+                out
+            }
+            val topKeys = top.map { it.key }.toSet()
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
+                if (top.isNotEmpty()) {
+                    item(key = "h_top") { Text("Top matches", color = t.text, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+                    items(top, key = { "top_${it.key}" }) { item -> OnlineRow(item, vm, onOpen = { stack.add(it) }, onDownload = { vm.dlRequest = listOf(it) to "" }, showSource = true) }
+                }
                 shown.forEach { k ->
                     val st = results[k]!!
                     item(key = "h_$k") {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(k.label, color = t.text, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                             if (st.loading) CircularProgressIndicator(Modifier.size(16.dp), color = t.primary, strokeWidth = 2.dp)
-                            else if (filter == 0 && st.items.size > 5) Text("See all ${st.items.size}", color = t.primary, fontSize = 13.sp, modifier = Modifier.clickable { filter = ALL_SOURCES.indexOf(k) + 1 }.padding(4.dp))
+                            else if (multi && st.items.size > 5) Text("Only ${k.label} (${st.items.size})", color = t.primary, fontSize = 13.sp, modifier = Modifier.clickable { setEnabled(setOf(k)) }.padding(4.dp))
                         }
                     }
                     if (st.error != null) item(key = "e_$k") {
@@ -164,16 +215,16 @@ fun OnlineTab(vm: PlayerViewModel) {
                     } else if (!st.loading && st.items.isEmpty()) item(key = "n_$k") {
                         Text("Nothing found", color = t.text.copy(alpha = 0.45f), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
                     }
-                    val list = if (filter == 0) st.items.take(if (k == OnlineKind.Quran) 8 else 5) else st.items
+                    val list = (if (multi) st.items.take(if (k == OnlineKind.Quran) 8 else 5) else st.items).filter { it.key !in topKeys || it.collection != null }
                     items(list, key = { "${k}_${it.key}" }) { item ->
-                        OnlineRow(item, vm, onOpen = { stack.add(it) }, onDownload = { dlTarget = listOf(it) to "" })
+                        OnlineRow(item, vm, onOpen = { stack.add(it) }, onDownload = { vm.dlRequest = listOf(it) to "" })
                     }
                 }
             }
         }
     }
 
-    dlTarget?.let { (items, name) -> DownloadDialog(vm, items, name) { dlTarget = null } }
+    if (showFilters) SourcesDialog(enabled, suggestOn, onSources = { setEnabled(it) }, onSuggest = { suggestOn = it; prefs.edit().putBoolean("online_suggest", it).apply() }) { showFilters = false }
     if (showDownloads) DownloadsDialog { showDownloads = false }
 }
 
@@ -198,6 +249,11 @@ private fun CollectionScreen(vm: PlayerViewModel, item: OnlineItem, onBack: () -
             OnlinePill("Play all (${files.size})", true) { vm.playOnlineAll(files, files.first()) }
             OnlinePill("Download all", false) { onDownload(files, item.title) }
         }
+        val reciterKey = item.collection?.takeIf { it.startsWith("q:") && it.count { c -> c == ':' } == 1 }
+        if (reciterKey != null) Row(Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
+            val fav = vm.favSheikhs.any { it.second == reciterKey }
+            OnlinePill(if (fav) "★ Favorite sheikh" else "☆ Add to favorite sheikhs", fav) { vm.toggleSheikh(item.title, reciterKey) }
+        }
         vm.onlineError?.let { Text(it, color = t.text, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
         when {
             state.loading -> Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = t.primary) }
@@ -213,7 +269,7 @@ private fun CollectionScreen(vm: PlayerViewModel, item: OnlineItem, onBack: () -
 }
 
 @Composable
-private fun OnlineRow(item: OnlineItem, vm: PlayerViewModel, onOpen: (OnlineItem) -> Unit, onDownload: (OnlineItem) -> Unit, onPlay: ((OnlineItem) -> Unit)? = null) {
+private fun OnlineRow(item: OnlineItem, vm: PlayerViewModel, onOpen: (OnlineItem) -> Unit, onDownload: (OnlineItem) -> Unit, onPlay: ((OnlineItem) -> Unit)? = null, showSource: Boolean = false) {
     val t = LocalSudo.current
     val ctx = LocalContext.current
     val thumb by produceState<android.graphics.Bitmap?>(null, item.thumb) {
@@ -234,7 +290,7 @@ private fun OnlineRow(item: OnlineItem, vm: PlayerViewModel, onOpen: (OnlineItem
         Column(Modifier.weight(1f)) {
             Text(item.title, color = t.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                listOfNotNull(item.subtitle.takeIf { it.isNotBlank() }, item.durationSec.takeIf { it > 0 }?.let { fmt(it * 1000) } ?: if (item.kind == OnlineKind.Radio) "LIVE" else null).joinToString("  •  "),
+                listOfNotNull(item.kind.label.takeIf { showSource }, item.subtitle.takeIf { it.isNotBlank() }, item.durationSec.takeIf { it > 0 }?.let { fmt(it * 1000) } ?: if (item.kind == OnlineKind.Radio) "LIVE" else null).joinToString("  •  "),
                 color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
@@ -253,7 +309,7 @@ private fun OnlineRow(item: OnlineItem, vm: PlayerViewModel, onOpen: (OnlineItem
 
 /** Pick the quality (when the source offers several) and optionally a playlist to drop the finished file into. */
 @Composable
-private fun DownloadDialog(vm: PlayerViewModel, items: List<OnlineItem>, groupName: String, onClose: () -> Unit) {
+fun DownloadDialog(vm: PlayerViewModel, items: List<OnlineItem>, groupName: String, onClose: () -> Unit) {
     val t = LocalSudo.current
     val ctx = LocalContext.current
     val bulk = items.size > 1
@@ -348,14 +404,66 @@ private fun DownloadsDialog(onClose: () -> Unit) {
     )
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun OnlinePill(text: String, selected: Boolean, onClick: () -> Unit) {
+private fun OnlinePill(text: String, selected: Boolean, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
     val t = LocalSudo.current
     val shape = RoundedCornerShape(50)
     Text(
         text, color = if (selected) t.onAccent else t.text, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, fontSize = 14.sp, maxLines = 1,
         modifier = Modifier.clip(shape)
             .then(if (selected) Modifier.background(Brush.horizontalGradient(listOf(t.primary, t.secondary)), shape) else Modifier.sudoPanel(shape))
-            .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 9.dp),
+            .combinedClickable(onLongClick = onLong, onClick = onClick).padding(horizontal = 16.dp, vertical = 9.dp),
+    )
+}
+
+/** Same song from two sources (same title + artist words) shows once in Top matches. */
+private object OnlineMatchKey { fun of(i: OnlineItem) = com.sudosoc.sudoplay.online.OnlineMatch.tokens(i.title + " " + i.subtitle).sorted().joinToString(" ").ifBlank { i.key } }
+
+/** Which sources a search looks in. Every one can be switched off; "Only" jumps straight to a single source. */
+@Composable
+private fun SourcesDialog(enabled: Set<OnlineKind>, suggestOn: Boolean, onSources: (Set<OnlineKind>) -> Unit, onSuggest: (Boolean) -> Unit, onClose: () -> Unit) {
+    val t = LocalSudo.current
+    val about = mapOf(
+        OnlineKind.Quran to "Every sheikh and surah (mp3quran.net)",
+        OnlineKind.YouTube to "Huge catalogue — streams are often refused, then another source is tried",
+        OnlineKind.SoundCloud to "Full tracks, remixes, covers",
+        OnlineKind.Audius to "Independent artists, full tracks",
+        OnlineKind.Archive to "Free audio library: talks, old recordings, lectures",
+        OnlineKind.Radio to "Live stations (noisy for song searches, so off by default)",
+    )
+    AlertDialog(
+        onDismissRequest = onClose, containerColor = t.bgTop,
+        title = { Text("Search in", color = t.text) },
+        confirmButton = { TextButton(onClose) { Text("Done", color = t.primary) } },
+        dismissButton = {
+            Row {
+                TextButton({ onSources(ALL_SOURCES.toSet()) }) { Text("All", color = t.text.copy(alpha = 0.8f)) }
+                TextButton({ onSources(DEFAULT_ON) }) { Text("Reset", color = t.text.copy(alpha = 0.8f)) }
+            }
+        },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                ALL_SOURCES.forEach { k ->
+                    val on = k in enabled
+                    Row(Modifier.fillMaxWidth().clickable { onSources(if (on && enabled.size > 1) enabled - k else enabled + k) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(on, { onSources(if (on && enabled.size > 1) enabled - k else enabled + k) }, colors = CheckboxDefaults.colors(checkedColor = t.primary))
+                        Column(Modifier.weight(1f)) {
+                            Text(k.label, color = t.text, fontWeight = FontWeight.SemiBold)
+                            Text(about[k] ?: "", color = t.text.copy(alpha = 0.55f), fontSize = 11.sp)
+                        }
+                        Text("Only", color = t.primary, fontSize = 13.sp, modifier = Modifier.clickable { onSources(setOf(k)) }.padding(8.dp))
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Row(Modifier.fillMaxWidth().clickable { onSuggest(!suggestOn) }, verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Search suggestions", color = t.text, fontWeight = FontWeight.SemiBold)
+                        Text("Sends what you type to Google's suggestion service as you type. Off by default.", color = t.text.copy(alpha = 0.55f), fontSize = 11.sp)
+                    }
+                    Switch(suggestOn, onSuggest, colors = SwitchDefaults.colors(checkedTrackColor = t.primary, checkedThumbColor = t.onAccent))
+                }
+            }
+        },
     )
 }

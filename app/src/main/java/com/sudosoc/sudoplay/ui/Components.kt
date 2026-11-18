@@ -185,6 +185,7 @@ fun SongRow(song: Song, vm: PlayerViewModel, onClick: () -> Unit, extraMenu: (@C
                 DropdownMenuItem(text = { Text("Share") }, onClick = { shareSong(ctx, song); menu = false })
                 DropdownMenuItem(text = { Text("Song info") }, onClick = { vm.infoSong = song; menu = false })
                 DropdownMenuItem(text = { Text("Make video clip") }, onClick = { vm.clipSong = song; menu = false })
+                DropdownMenuItem(text = { Text("Find online") }, onClick = { vm.findOnline(song); menu = false })
                 extraMenu?.invoke { menu = false }
             }
         }
