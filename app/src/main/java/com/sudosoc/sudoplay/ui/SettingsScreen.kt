@@ -164,7 +164,7 @@ private fun HomePage(vm: PlayerViewModel, onOpen: (String) -> Unit) {
         BigSection(I.Tune, "Properties", "الخصائص", "Gestures, seek sensitivity, vibration") { onOpen("props") }
         BigSection(I.AutoAwesome, "Features", "المميزات", "Sound, lyrics, play history, backup") { onOpen("features") }
         BigSection(I.Explore, "Car mode", "وضع السيارة", "Big landscape screen for the head unit") { vm.carMode = true }
-        Text("SUDOPLAY 0.8.0 • by SUDOSOC", color = t.text.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall,
+        Text("SUDOPLAY 0.9.0 • by SUDOSOC", color = t.text.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(20.dp))
     }
 }

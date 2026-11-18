@@ -166,6 +166,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private fun flushReady() { if (controller != null && songs.isNotEmpty() && readyActions.isNotEmpty()) { val l = readyActions.toList(); readyActions.clear(); l.forEach { it() } } }
     fun appContext() = ctx
     // ---- online (YouTube / SoundCloud / radio / links) ----
+    init {
+        com.sudosoc.sudoplay.online.Online.attach(ctx)
+        com.sudosoc.sudoplay.online.DownloadCenter.attach(ctx) { job ->
+            job.playlistId?.let { if (job.songId > 0) store.addSong(it, job.songId) }
+            refreshLibrary()
+        }
+    }
     val onlineSongs = HashMap<Long, Song>()
     var onlineBusy by mutableStateOf<String?>(null); private set
     var onlineError by mutableStateOf<String?>(null)
@@ -184,6 +191,18 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Throwable) {
                 onlineError = (e.message ?: e.javaClass.simpleName).take(160)
             } finally { onlineBusy = null }
+        }
+    }
+    /** Plays a list of direct-file items (a reciter's surahs, an archive.org item…) as a queue, starting at [start]. */
+    fun playOnlineAll(items: List<com.sudosoc.sudoplay.online.OnlineItem>, start: com.sudosoc.sudoplay.online.OnlineItem) {
+        val playable = items.filter { it.kind.direct && it.collection == null && it.url.isNotBlank() }
+        if (playable.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val songs = playable.map { com.sudosoc.sudoplay.online.Online.resolve(it) }
+                songs.forEach { onlineSongs[it.id] = it }
+                play(songs, playable.indexOf(start).coerceAtLeast(0))
+            } catch (e: Throwable) { onlineError = (e.message ?: "Could not play").take(160) }
         }
     }
     fun playOnlineLink(link: String) {

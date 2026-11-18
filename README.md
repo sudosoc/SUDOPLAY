@@ -76,3 +76,11 @@ New **Online** tab (can be hidden from Appearance → Navigation bar):
 - **Link**: paste a YouTube/SoundCloud page or any direct audio / HLS stream.
 - Online tracks can be queued (Play next / Add to queue), show their cover in the player and notification, and every request is listed in the Network log. Audio itself streams straight from its source.
 - `OnlineLiveTest` (ignored by default) probes the extractors against the live internet.
+
+## v0.9 — one search for everything, and downloads
+
+- **Online tab** is now a single search box: a song, a sheikh, a surah, or a pasted link (YouTube / SoundCloud / archive.org page / any direct audio or HLS link). Results arrive per source as they finish, with a source filter (All, Quran, SoundCloud, YouTube, Archive, Radio), recent searches, per-source retry.
+- **Quran** source: every reciter and surah from mp3quran.net (cached, searched locally, Arabic-aware: "الشيخ العفاسي سورة الكهف", "عبد الباسط"). A reciter opens a list of mushafs / surahs with Play all.
+- **Archive**: archive.org audio search; an item opens its tracks.
+- **Downloads**: pick the quality (every format/bitrate the source offers), optionally put the file in a playlist (existing or new) — or "Download all" for a whole reciter/album. Saved to Music/SUDOPLAY (shows up in the library), 2 at a time, with a foreground notification, progress list and cancel. SoundCloud HLS is stitched into a normal .m4a.
+- Unit tests for the Quran search against a copy of the real directory.

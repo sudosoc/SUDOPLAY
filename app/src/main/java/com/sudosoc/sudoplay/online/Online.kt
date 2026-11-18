@@ -20,10 +20,20 @@ import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.util.concurrent.TimeUnit
 
-enum class OnlineKind { YouTube, SoundCloud, Radio, Link }
+enum class OnlineKind(val label: String) {
+    Quran("Quran"), SoundCloud("SoundCloud"), YouTube("YouTube"), Archive("Archive"), Radio("Radio"), Link("Link");
+    /** true when [OnlineItem.url] already is the audio file (no extractor needed). */
+    val direct get() = this == Quran || this == Archive || this == Radio || this == Link
+}
 
-/** One search result / station / link. [url] is the page (YouTube/SoundCloud) or the stream itself (radio, link). */
-class OnlineItem(val kind: OnlineKind, val title: String, val subtitle: String, val thumb: String?, val durationSec: Long, val url: String)
+/**
+ * One search result / station / link. [url] is the page (YouTube/SoundCloud) or the audio file itself.
+ * When [collection] is set the item is a folder (a reciter, an archive.org item…) that opens a list of children.
+ */
+class OnlineItem(
+    val kind: OnlineKind, val title: String, val subtitle: String, val thumb: String?, val durationSec: Long, val url: String,
+    val collection: String? = null,
+) { val key get() = collection ?: url }
 
 /** Everything that leaves the phone for the Online tab goes through here and is written to the network log. */
 object Online {
@@ -55,13 +65,18 @@ object Online {
         NetLog.add(NetEntry(System.currentTimeMillis(), method, u.host ?: "?", (u.path ?: "/").take(60), code, bytes, ms))
     }
 
+    lateinit var appCtx: android.content.Context
+    fun attach(ctx: android.content.Context) { appCtx = ctx.applicationContext }
+
     @Volatile private var inited = false
     private fun init() {
         if (inited) return
         synchronized(this) { if (!inited) { NewPipe.init(OkDownloader(), Localization.DEFAULT); inited = true } }
     }
 
-    private fun idFor(url: String): Long = (url.hashCode().toLong() shl 32 or (url.reversed().hashCode().toLong() and 0xFFFFFFFFL)) or Long.MIN_VALUE
+    fun isLink(q: String) = q.trim().let { (it.startsWith("http://") || it.startsWith("https://")) && !it.contains(' ') }
+
+    fun idFor(url: String): Long = (url.hashCode().toLong() shl 32 or (url.reversed().hashCode().toLong() and 0xFFFFFFFFL)) or Long.MIN_VALUE
 
     // ---------------- search ----------------
     suspend fun search(kind: OnlineKind, query: String): List<OnlineItem> = withContext(Dispatchers.IO) {
@@ -77,7 +92,61 @@ object Online {
                     OnlineItem(kind, it.name ?: "", it.uploaderName ?: "", it.thumbnails.firstOrNull()?.url, it.duration, it.url)
                 }
             }
+            OnlineKind.Quran -> Quran.search(appCtx, query)
+            OnlineKind.Archive -> archiveSearch(query)
             OnlineKind.Link -> emptyList()
+        }
+    }
+
+    /** Opens a collection item: a reciter (→ recitations), an archive.org item (→ its audio files). */
+    suspend fun children(item: OnlineItem): List<OnlineItem> = withContext(Dispatchers.IO) {
+        val key = item.collection ?: return@withContext emptyList()
+        when {
+            key.startsWith("q:") -> Quran.children(appCtx, key)
+            key.startsWith("a:") -> archiveFiles(key.removePrefix("a:"), item.title)
+            else -> emptyList()
+        }
+    }
+
+    // ---------------- archive.org (free audio library, no key) ----------------
+    private fun getJson(url: String): String {
+        val t0 = System.currentTimeMillis()
+        http.newCall(okhttp3.Request.Builder().url(url).header("User-Agent", "SUDOPLAY/0.9").build()).execute().use { r ->
+            val body = r.body?.string() ?: ""
+            log("GET", url, r.code, body.length.toLong(), System.currentTimeMillis() - t0)
+            if (!r.isSuccessful) throw java.io.IOException("HTTP ${r.code}")
+            return body
+        }
+    }
+
+    private fun archiveSearch(q: String): List<OnlineItem> {
+        val term = Uri.encode("($q) AND mediatype:audio")
+        val body = getJson("https://archive.org/advancedsearch.php?q=$term&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=creator&rows=20&sort%5B%5D=downloads+desc&output=json")
+        val docs = org.json.JSONObject(body).getJSONObject("response").getJSONArray("docs")
+        return (0 until docs.length()).map { docs.getJSONObject(it) }.map {
+            val creator = it.opt("creator").let { c -> if (c is JSONArray) c.optString(0) else c?.toString().orEmpty() }
+            OnlineItem(OnlineKind.Archive, it.optString("title").ifBlank { it.optString("identifier") }, creator, "https://archive.org/services/img/${it.optString("identifier")}", 0L, "", "a:" + it.optString("identifier"))
+        }
+    }
+
+    private fun archiveFiles(id: String, parentTitle: String): List<OnlineItem> {
+        val files = org.json.JSONObject(getJson("https://archive.org/metadata/${Uri.encode(id)}")).optJSONArray("files") ?: return emptyList()
+        val audio = (0 until files.length()).map { files.getJSONObject(it) }.filter {
+            val f = it.optString("format")
+            f.contains("MP3", true) || f.contains("Ogg Vorbis", true) || f.contains("M4A", true) || f.contains("AAC", true)
+        }
+        // an item usually stores each track in several derivatives; keep one per track, MP3 first
+        val byBase = LinkedHashMap<String, org.json.JSONObject>()
+        for (f in audio.sortedBy { if (it.optString("format").contains("MP3", true)) 0 else 1 }) {
+            val base = f.optString("name").substringBeforeLast('.')
+            byBase.putIfAbsent(base, f)
+        }
+        return byBase.values.sortedBy { it.optString("name") }.map { f ->
+            val len = f.optString("length").let { l -> l.toDoubleOrNull()?.toLong() ?: l.split(":").mapNotNull { p -> p.toLongOrNull() }.fold(0L) { a, p -> a * 60 + p } }
+            OnlineItem(
+                OnlineKind.Archive, f.optString("title").ifBlank { f.optString("name").substringBeforeLast('.') }, parentTitle, "https://archive.org/services/img/$id",
+                len, "https://archive.org/download/${Uri.encode(id)}/" + f.optString("name").split("/").joinToString("/") { Uri.encode(it) },
+            )
         }
     }
 
@@ -115,7 +184,8 @@ object Online {
     suspend fun resolve(item: OnlineItem): Song = withContext(Dispatchers.IO) {
         val id = idFor(item.url)
         when (item.kind) {
-            OnlineKind.Radio, OnlineKind.Link -> song(id, item.title, item.subtitle.ifBlank { if (item.kind == OnlineKind.Radio) "Radio" else "Stream" }, item.url, item.thumb, 0L)
+            OnlineKind.Radio, OnlineKind.Link, OnlineKind.Quran, OnlineKind.Archive ->
+                song(id, item.title, item.subtitle.ifBlank { if (item.kind == OnlineKind.Radio) "Radio" else "Stream" }, item.url, item.thumb, item.durationSec * 1000)
             else -> {
                 init()
                 val info = StreamInfo.getInfo(item.url)
@@ -134,6 +204,9 @@ object Online {
     suspend fun fromLink(link: String): OnlineItem = withContext(Dispatchers.IO) {
         val u = link.trim()
         require(u.startsWith("http://") || u.startsWith("https://")) { "Paste a full link starting with http" }
+        Regex("archive\\.org/details/([^/?#]+)").find(u)?.let { m ->
+            return@withContext OnlineItem(OnlineKind.Archive, m.groupValues[1], "archive.org", null, 0, "", "a:" + m.groupValues[1])
+        }
         init()
         val svc = runCatching { NewPipe.getServiceByUrl(u) }.getOrNull()
         when (svc?.serviceId) {

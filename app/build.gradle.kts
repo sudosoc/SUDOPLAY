@@ -12,8 +12,8 @@ android {
         applicationId = "com.sudosoc.sudoplay"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.8.0"
+        versionCode = 9
+        versionName = "0.9.0"
     }
 
     buildTypes {
@@ -50,4 +50,5 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }
