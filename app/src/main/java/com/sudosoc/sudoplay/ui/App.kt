@@ -78,7 +78,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
     val iconStyle = runCatching { IconStyle.valueOf(vm.settings.iconStyle.value) }.getOrDefault(IconStyle.Rounded)
     CompositionLocalProvider(LocalIconStyle provides iconStyle) {
     val coverArt by rememberArt(vm.current, 64)
-    SudoPlayTheme(vm.themeId, cover = if (vm.settings.coverColors.value) coverArt else null) {
+    SudoPlayTheme(vm.themeId, cover = if (vm.settings.coverColors.value) coverArt else null, liveMode = vm.settings.liveMode.value) {
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var detail by remember { mutableStateOf<Detail?>(null) }
         LaunchedEffect(vm.wantTab) { vm.wantTab?.let { w -> if (w == 5) vm.settings.navOnline.set(true); tab = w; detail = null; vm.wantTab = null } }
@@ -107,10 +107,11 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                 }
                 val body: @Composable ColumnScope.() -> Unit = {
                     Box(Modifier.weight(1f)) {
-                        when {
-                            !granted -> PermissionGate(onRequest)
-                            detail != null -> DetailScreen(vm, detail!!) { detail = null }
-                            else -> when (cur) {
+                        val shown = if (!granted) -2 else if (detail != null) -1 else cur
+                        androidx.compose.animation.Crossfade(shown, animationSpec = androidx.compose.animation.core.tween(160), label = "tab") { key ->
+                            when (key) {
+                                -2 -> PermissionGate(onRequest)
+                                -1 -> detail?.let { d -> DetailScreen(vm, d) { detail = null } }
                                 0 -> SongsTab(vm)
                                 1 -> AlbumsTab(vm) { detail = it }
                                 2 -> BrowseTab(vm) { detail = it }
@@ -142,6 +143,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                 }
                 BackHandler(enabled = sheet.isOpen) { sheet.close() }
                 if (vm.carMode) CarScreen(vm) { vm.carMode = false }
+                if (vm.openStudio) EqStudio(vm) { vm.openStudio = false }
                 vm.dlRequest?.let { (items, name) -> DownloadDialog(vm, items, name) { vm.dlRequest = null } }
                 vm.infoSong?.let { SongInfoDialog(vm, it) { vm.infoSong = null } }
                 vm.clipSong?.let { ClipScreen(vm, it) { vm.clipSong = null } }
@@ -157,8 +159,9 @@ private fun NavBar(tabs: List<Tab>, selected: Int, vertical: Boolean, onSelect: 
     val t = LocalSudo.current
     val items: @Composable (Tab) -> Unit = { tb ->
         val on = tb.index == selected
+        val pill by androidx.compose.animation.animateColorAsState(if (on) t.primary.copy(alpha = 0.18f) else Color.Transparent, androidx.compose.animation.core.tween(220), label = "pill")
         Column(
-            Modifier.clip(RoundedCornerShape(16.dp)).clickable { onSelect(tb.index) }.padding(horizontal = 8.dp, vertical = 4.dp),
+            Modifier.clip(RoundedCornerShape(16.dp)).background(pill).clickable { onSelect(tb.index) }.padding(horizontal = 12.dp, vertical = 5.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Icon(tb.icon, null, tint = if (on) t.primary else t.text.copy(alpha = 0.6f))

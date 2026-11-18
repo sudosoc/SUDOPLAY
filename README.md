@@ -93,3 +93,10 @@ New **Online** tab (can be hidden from Appearance → Navigation bar):
 - **YouTube fallback**: if YouTube refuses a stream (it often blocks anonymous access), the same song is looked up on SoundCloud / Audius (title+artist+length matching) and played from there, with a note saying so.
 - **Search suggestions** (opt-in, off by default — it sends the typed text to Google's suggest service; shown in the Network log).
 - **Find online** on any library song, **Download** action for the playing online song (gesture/button action), **favorite sheikhs** on the Online page, Quran radio shortcut.
+
+## v0.11 — Sound studio, live themes, tidier settings
+
+- **Sound studio rebuilt**: one live graph (spectrum behind, true combined EQ curve, 10 draggable band dots) and five tabs — EQ, Sound, Space, Dynamics, Output. Parametric EQ now has 10 bands with Bell / Low shelf / High shelf / High-pass / Low-pass / Notch, 0.1 dB gain steps, Q 0.3–20, ±6/12/18 dB view, auto headroom, 16 presets, and a soft-limiter switch. The DSP uses double-precision biquads. Old 5-band settings migrate automatically. The phone's built-in graphic EQ moved to a collapsed card.
+- **Live themes**: 14 animated app themes (Aurora, Rain, Fireflies, Neon/Golden Pulse, Lava, Snow, Code rain, Bokeh, Ripples, Embers, Nebula, Sakeenah Lights, Northern Lights) and 14 matching player themes. Setting: Still / Moving / With music (pulses and glows follow the bass).
+- **Settings reorganised** into Look & feel · Listening · Your stuff, with a hint under every option: Appearance, Sound & playback, Gestures & feedback, Car & launch, Library & files, Online & privacy, Backup & about.
+- Cross-fade between tabs and settings pages, highlighted nav tab, branded settings header.

@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.dp
 import com.sudosoc.sudoplay.PlayerViewModel
 import com.sudosoc.sudoplay.data.CoverStore
 
+const val APP_VERSION = "0.11.0"
+
 @Composable
 fun SettingsTab(vm: PlayerViewModel) {
     var page by rememberSaveable { mutableStateOf("home") }
@@ -55,14 +57,16 @@ fun SettingsTab(vm: PlayerViewModel) {
         page = when (page) {
             "app_themes", "player_themes", "seek_styles", "icon_styles", "player_buttons", "nav_bar" -> "appearance"
             "arrange" -> "player_buttons"
-            "stats", "dupes" -> "features"
+            "stats", "dupes" -> "extras"
             "gesture_editor" -> "props"
-            "hidden_folders", "netlog" -> "extras"
+            "hidden_folders" -> "extras"
+            "netlog" -> "online"
             else -> "home"
         }
     }
 
-    when (page) {
+    androidx.compose.animation.Crossfade(page, animationSpec = androidx.compose.animation.core.tween(150), label = "settings") { pg ->
+    when (pg) {
         "appearance" -> AppearancePage(vm, onOpen = { page = it }, onBack = { page = "home" })
         "app_themes" -> AppThemesPage(vm) { page = "appearance" }
         "player_themes" -> PlayerThemesPage(vm) { page = "appearance" }
@@ -72,14 +76,18 @@ fun SettingsTab(vm: PlayerViewModel) {
         "arrange" -> ArrangePage(vm) { page = "player_buttons" }
         "gesture_editor" -> GestureEditorPage(vm) { page = "props" }
         "nav_bar" -> NavBarPage(vm) { page = "appearance" }
-        "stats" -> StatsPage(vm) { page = "features" }
-        "dupes" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) { SubHeader("Duplicate finder", { page = "features" }); DuplicatesBody(vm) }
+        "stats" -> StatsPage(vm) { page = "extras" }
+        "dupes" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) { SubHeader("Duplicate finder", { page = "extras" }); DuplicatesBody(vm) }
         "extras" -> ExtrasPage(vm, onOpen = { page = it }) { page = "home" }
         "hidden_folders" -> HiddenFoldersPage(vm) { page = "extras" }
-        "netlog" -> NetLogPage { page = "extras" }
+        "netlog" -> NetLogPage { page = "online" }
         "props" -> PropertiesPage(vm, onOpen = { page = it }) { page = "home" }
-        "features" -> FeaturesPage(vm, onOpen = { page = it }) { page = "home" }
+        "sound" -> SoundPage(vm) { page = "home" }
+        "car" -> CarPage(vm) { page = "home" }
+        "online" -> OnlineSettingsPage(vm, onOpen = { page = it }) { page = "home" }
+        "backup" -> BackupPage(vm) { page = "home" }
         else -> HomePage(vm) { page = it }
+    }
     }
 }
 
@@ -108,6 +116,12 @@ private fun RowCard(onClick: (() -> Unit)? = null, content: @Composable RowScope
         (if (onClick != null) m.clickable(onClick = onClick) else m).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically, content = content,
     )
+}
+
+/** A short grey line under a row, explaining what the option above it does. */
+@Composable
+private fun HintLine(text: String) {
+    Text(text, color = LocalSudo.current.text.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 22.dp, vertical = 2.dp))
 }
 
 @Composable
@@ -157,14 +171,29 @@ private fun NavRow(icon: ImageVector, title: String, sub: String?, onClick: () -
 @Composable
 private fun HomePage(vm: PlayerViewModel, onOpen: (String) -> Unit) {
     val t = LocalSudo.current
+    val st = vm.settings
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        ScreenTitle("Settings")
-        BigSection(I.Palette, "Appearance", "المظهر", "App themes and player-page themes") { onOpen("appearance") }
-        BigSection(I.Extension, "Extras", "الإضافات", "Library filters, hidden folders, .lrc lyrics, covers") { onOpen("extras") }
-        BigSection(I.Tune, "Properties", "الخصائص", "Gestures, seek sensitivity, vibration") { onOpen("props") }
-        BigSection(I.AutoAwesome, "Features", "المميزات", "Sound, lyrics, play history, backup") { onOpen("features") }
-        BigSection(I.Explore, "Car mode", "وضع السيارة", "Big landscape screen for the head unit") { vm.carMode = true }
-        Text("SUDOPLAY 0.10.0 • by SUDOSOC", color = t.text.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall,
+        Row(Modifier.padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(t.primary, t.secondary))), contentAlignment = Alignment.Center) {
+                Icon(I.LibraryMusic, null, tint = t.onAccent)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text("SUDOPLAY", color = t.text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, letterSpacing = androidx.compose.ui.unit.TextUnit(2f, androidx.compose.ui.unit.TextUnitType.Sp))
+                Text("Settings • v$APP_VERSION", color = t.text.copy(alpha = 0.55f), style = MaterialTheme.typography.labelMedium)
+            }
+        }
+        SectionLabel("Look & feel")
+        BigSection(I.Palette, "Appearance", "المظهر", "${Themes.byId(st.theme.value).name} • ${PlayerThemes.byId(st.playerTheme.value).name} • live backgrounds, icons, seek bar, tabs, widget") { onOpen("appearance") }
+        SectionLabel("Listening")
+        BigSection(I.Equalizer, "Sound & playback", "الصوت", "Sound studio, crossfade, ReplayGain, skip silence, lecture mode") { onOpen("sound") }
+        BigSection(I.Tune, "Gestures & feedback", "اللمس", "What every tap and swipe does, seek sensitivity, vibration") { onOpen("props") }
+        BigSection(I.Explore, "Car & launch", "السيارة", "Car mode, autoplay on open, keep screen on") { onOpen("car") }
+        SectionLabel("Your stuff")
+        BigSection(I.LibraryMusic, "Library & files", "المكتبة", "Hidden folders, short tracks, lyrics, covers, duplicates, listening stats") { onOpen("extras") }
+        BigSection(I.Search, "Online & privacy", "الأونلاين", "Search suggestions, network log, what leaves your phone") { onOpen("online") }
+        BigSection(I.Collections, "Backup & about", "النسخ الاحتياطي", "Back up and restore everything in one file") { onOpen("backup") }
+        Text("SUDOPLAY $APP_VERSION • by SUDOSOC", color = t.text.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(20.dp))
     }
 }
@@ -196,8 +225,28 @@ private fun AppearancePage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         SubHeader("Appearance", onBack)
         SectionLabel("Themes")
-        NavRow(I.Apps, "App themes", "${Themes.byId(s.theme.value).name} • ${Themes.all.size} themes") { onOpen("app_themes") }
+        NavRow(I.Apps, "App themes", "${Themes.byId(s.theme.value).name} • ${Themes.all.size} themes, ${Themes.all.count { it.live != null }} of them live") { onOpen("app_themes") }
         NavRow(I.PlayCircle, "Player themes", "${PlayerThemes.byId(s.playerTheme.value).name} • ${PlayerThemes.all.size} looks, live previews") { onOpen("player_themes") }
+        SectionLabel("Live backgrounds")
+        RowCard {
+            val tt = LocalSudo.current
+            Column(Modifier.weight(1f)) {
+                Text("Animated backgrounds", color = tt.text, fontWeight = FontWeight.SemiBold)
+                Text("Used by the Live themes and the live player themes. \"With music\" makes pulses and glows follow the bass. Choose Still to save battery.", color = tt.text.copy(alpha = 0.62f), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0 to "Still", 1 to "Moving", 2 to "With music").forEach { (v, label) ->
+                        val on = s.liveMode.value == v
+                        Text(
+                            label, color = if (on) tt.onAccent else tt.text, fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                            modifier = Modifier.clip(RoundedCornerShape(50))
+                                .then(if (on) Modifier.background(Brush.horizontalGradient(listOf(tt.primary, tt.secondary))) else Modifier.border(1.dp, tt.text.copy(alpha = 0.25f), RoundedCornerShape(50)))
+                                .clickable { s.liveMode.set(v) }.padding(horizontal = 14.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+            }
+        }
         SectionLabel("Player page")
         NavRow(I.Tune, "Seek bar style", "${SeekStyles.firstOrNull { it.first == s.seekStyle.value }?.second ?: "Classic"} • ${SeekStyles.size} shapes") { onOpen("seek_styles") }
         NavRow(I.Palette, "Icon style", "${runCatching { IconStyle.valueOf(s.iconStyle.value) }.getOrDefault(IconStyle.Rounded).label} • ${IconStyle.entries.size} families") { onOpen("icon_styles") }
@@ -255,6 +304,7 @@ private fun ThemeCard(th: AppTheme, selected: Boolean, onClick: () -> Unit) {
             .border(if (selected) 3.dp else 1.dp, if (selected) th.primary else Color.White.copy(alpha = 0.15f), shape)
             .clickable(onClick = onClick),
     ) {
+        th.live?.let { LiveLayer(it, listOf(th.bgTop, th.primary, th.secondary, th.text), animated = true) }
         if (th.style == Style.Glass || th.style == Style.Gradient || th.style == Style.Art) {
             Box(Modifier.size(90.dp).align(Alignment.TopStart).background(Brush.radialGradient(listOf(th.primary.copy(alpha = 0.45f), Color.Transparent))))
             Box(Modifier.size(90.dp).align(Alignment.BottomEnd).background(Brush.radialGradient(listOf(th.secondary.copy(alpha = 0.45f), Color.Transparent))))
@@ -263,7 +313,7 @@ private fun ThemeCard(th: AppTheme, selected: Boolean, onClick: () -> Unit) {
             val panelShape = RoundedCornerShape(14.dp)
             val panel = when (th.style) {
                 Style.Solid -> Modifier.background(th.surface, panelShape)
-                Style.Glass -> Modifier.background(if (th.dark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.55f), panelShape)
+                Style.Glass, Style.Live -> Modifier.background(if (th.dark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.55f), panelShape)
                 Style.Art -> Modifier.background(if (th.dark) Color.Black.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.6f), panelShape)
                 Style.Gradient -> Modifier.background(Brush.linearGradient(listOf(th.primary.copy(alpha = 0.28f), th.secondary.copy(alpha = 0.22f))), panelShape)
                 Style.Soft -> Modifier.background(th.surface, panelShape).border(1.dp, Color.White.copy(alpha = if (th.dark) 0.07f else 0.8f), panelShape)
@@ -280,7 +330,7 @@ private fun ThemeCard(th: AppTheme, selected: Boolean, onClick: () -> Unit) {
             }
             Column {
                 Text(th.name, color = th.text, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(th.style.label + if (th.dynamic) " • wallpaper colors" else "", color = th.text.copy(alpha = 0.7f), style = MaterialTheme.typography.labelSmall)
+                Text(th.style.label + (th.live?.let { " • ${it.label}" } ?: "") + if (th.dynamic) " • wallpaper colors" else "", color = th.text.copy(alpha = 0.7f), style = MaterialTheme.typography.labelSmall)
             }
         }
         if (selected) Icon(I.CheckCircle, null, tint = th.primary, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp))
@@ -383,16 +433,16 @@ private fun PlayerButtonsPage(vm: PlayerViewModel, onOpen: (String) -> Unit, onB
         Text("Hide what you don't use. Play / pause always stays.", color = LocalSudo.current.text.copy(alpha = 0.62f), style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp))
         SectionLabel("Top bar")
-        SwitchRow("Lyrics", null, s.btnLyrics.value) { s.btnLyrics.set(it) }
-        SwitchRow("Queue", null, s.btnQueue.value) { s.btnQueue.set(it) }
+        SwitchRow("Lyrics", "Opens synced lyrics over the cover", s.btnLyrics.value) { s.btnLyrics.set(it) }
+        SwitchRow("Queue", "See and reorder what plays next", s.btnQueue.value) { s.btnQueue.set(it) }
         SectionLabel("Next to the title")
-        SwitchRow("Favorite", null, s.btnFav.value) { s.btnFav.set(it) }
-        SwitchRow("Add to playlist", null, s.btnPlaylist.value) { s.btnPlaylist.set(it) }
+        SwitchRow("Favorite", "Heart a song so it shows in Favorites", s.btnFav.value) { s.btnFav.set(it) }
+        SwitchRow("Add to playlist", "Quick add to any playlist", s.btnPlaylist.value) { s.btnPlaylist.set(it) }
         SectionLabel("Transport")
-        SwitchRow("Shuffle", null, s.btnShuffle.value) { s.btnShuffle.set(it) }
-        SwitchRow("Previous", null, s.btnPrev.value) { s.btnPrev.set(it) }
-        SwitchRow("Next", null, s.btnNext.value) { s.btnNext.set(it) }
-        SwitchRow("Repeat", null, s.btnRepeat.value) { s.btnRepeat.set(it) }
+        SwitchRow("Shuffle", "Plays the queue in random order", s.btnShuffle.value) { s.btnShuffle.set(it) }
+        SwitchRow("Previous", "Back to the last song (or restart this one)", s.btnPrev.value) { s.btnPrev.set(it) }
+        SwitchRow("Next", "Skip to the next song", s.btnNext.value) { s.btnNext.set(it) }
+        SwitchRow("Repeat", "Off, repeat all, or repeat one", s.btnRepeat.value) { s.btnRepeat.set(it) }
         SectionLabel("Under the seek bar")
         SwitchRow("A–B loop", "Mark a part of the song and repeat just that", s.btnAb.value) { s.btnAb.set(it) }
         SectionLabel("Bottom chips")
@@ -412,7 +462,7 @@ private fun ExtrasPage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack: ()
     var covers by remember { mutableIntStateOf(CoverStore.count(ctx)) }
     var minDur by remember { mutableFloatStateOf(s.minDurationSec.value.toFloat()) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        SubHeader("Extras", onBack)
+        SubHeader("Library & files", onBack)
 
         SectionLabel("Library")
         SliderRow(
@@ -426,6 +476,26 @@ private fun ExtrasPage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack: ()
             TitleSub("Rescan library", "${vm.rawSongs.size} tracks found • new files are picked up automatically", Modifier.weight(1f))
         }
 
+        SectionLabel("Plays & history")
+        NavRow(I.Whatshot, "Your stats", "Listening time, top tracks, artists and albums") { onOpen("stats") }
+        SwitchRow("Count plays", "Feeds Recently played / Most played / Never played / Mix", s.countPlays.value) { s.countPlays.set(it) }
+        RowCard(onClick = { vm.clearHistory() }) {
+            Icon(I.DeleteSweep, null, tint = t.primary)
+            Spacer(Modifier.width(12.dp))
+            TitleSub("Clear play history", "Resets play counts and the recent list", Modifier.weight(1f))
+        }
+        NavRow(I.Search, "Duplicate finder", "Finds the same song stored twice") { onOpen("dupes") }
+        RowCard {
+            Column(Modifier.weight(1f)) {
+                Text("When you listen", color = t.text, fontWeight = FontWeight.SemiBold)
+                val mx = (vm.hourCounts.maxOrNull() ?: 0).coerceAtLeast(1)
+                Row(Modifier.fillMaxWidth().height(48.dp).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.Bottom) {
+                    vm.hourCounts.forEach { c -> Box(Modifier.weight(1f).fillMaxHeight((0.08f + 0.92f * c / mx)).background(t.primary.copy(alpha = if (c == 0) 0.2f else 0.9f), RoundedCornerShape(2.dp))) }
+                }
+                Text("0h                      12h                    23h", color = t.text.copy(alpha = 0.45f), fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp))
+            }
+        }
+
         SectionLabel("Lyrics")
         val canLrc = Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()
         NavRow(I.Lyrics, "Lyrics from .lrc files", if (canLrc) "Enabled" else "Tap to allow all-files access") {
@@ -434,8 +504,7 @@ private fun ExtrasPage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack: ()
             )
         }
 
-        SwitchRow("Download missing lyrics", "Asks lrclib.net (free, no account) when a song has none. Sends only title, artist, album and length", s.autoLyrics.value) { s.autoLyrics.set(it) }
-        NavRow(I.Search, "Network log", "${com.sudosoc.sudoplay.data.NetLog.entries.size} requests since the app started • see exactly what leaves your phone") { onOpen("netlog") }
+        HintLine("Downloading missing lyrics and the network log are under Online & privacy.")
 
         SectionLabel("Covers")
         RowCard {
@@ -546,10 +615,10 @@ private fun NavBarPage(vm: PlayerViewModel, onBack: () -> Unit) {
             }
         }
         SectionLabel("Tabs")
-        SwitchRow("Songs", null, s.navSongs.value) { s.navSongs.set(it) }
-        SwitchRow("Albums", null, s.navAlbums.value) { s.navAlbums.set(it) }
+        SwitchRow("Songs", "Your whole library, sortable and searchable", s.navSongs.value) { s.navSongs.set(it) }
+        SwitchRow("Albums", "Cover grid of your albums", s.navAlbums.value) { s.navAlbums.set(it) }
         SwitchRow("Browse", "Artists and folders", s.navBrowse.value) { s.navBrowse.set(it) }
-        SwitchRow("Playlists", null, s.navPlaylists.value) { s.navPlaylists.set(it) }
+        SwitchRow("Playlists", "Your playlists and smart lists", s.navPlaylists.value) { s.navPlaylists.set(it) }
         SwitchRow("Online", "YouTube, SoundCloud, radio and links — no account or API key", s.navOnline.value) { s.navOnline.set(it) }
         RowCard { TitleSub("Settings", "Always shown so you can never lock yourself out", Modifier.weight(1f)) }
         Spacer(Modifier.height(24.dp))
@@ -590,50 +659,34 @@ private fun StatsPage(vm: PlayerViewModel, onBack: () -> Unit) {
 
 // ---------------------------------------------------------------- features
 @Composable
-private fun FeaturesPage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack: () -> Unit) {
+private fun SoundPage(vm: PlayerViewModel, onBack: () -> Unit) {
+    val s = vm.settings
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        SubHeader("Sound & playback", onBack)
+        SectionLabel("Sound")
+        NavRow(I.Equalizer, "Sound studio", "10-band parametric EQ, scenes, reverb, echo, surround, night mode") { vm.openStudio = true }
+        SliderRow("Fade between songs", if (s.crossfade.value == 0) "Off" else "${s.crossfade.value} s", s.crossfade.value.toFloat(), 0f..12f, steps = 11, onDone = { vm.applyMisc() }) { s.crossfade.set(it.toInt()) }
+        HintLine("Overlaps the end of a song with the start of the next. Takes effect on the next track change.")
+        SwitchRow("Even out loudness (ReplayGain)", "Brings every song to a similar volume so you stop touching the volume key", s.replayGain.value) { s.replayGain.set(it); vm.applyMisc() }
+        SwitchRow("Sound per output", "Remembers your EQ for each headphones / speaker (now: ${vm.outputName})", s.deviceEq.value) { s.deviceEq.set(it) }
+        SectionLabel("Playback")
+        SwitchRow("Skip silence", "Jumps over silent gaps inside tracks — good for lectures and live recordings", s.skipSilence.value) { s.skipSilence.set(it); vm.applyMisc() }
+        SwitchRow("Fade out when the sleep timer ends", "Volume eases down over the last 15 seconds instead of cutting off", s.sleepFade.value) { s.sleepFade.set(it) }
+        SwitchRow("Shake to skip", "Shake the phone to jump to the next track (only while playing)", s.shake.value) { s.shake.set(it) }
+        SwitchRow("Resume when headphones connect", "Starts playing again when Bluetooth or wired audio connects", s.resumeOnConnect.value) { s.resumeOnConnect.set(it) }
+        SectionLabel("Long recordings")
+        SwitchRow("Lecture mode", "Recordings longer than ${s.lectureMinutes.value} min remember where you stopped and the speed you used", s.lectureMode.value) { s.lectureMode.set(it) }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun CarPage(vm: PlayerViewModel, onBack: () -> Unit) {
     val s = vm.settings
     val t = LocalSudo.current
-    val ctx = LocalContext.current
-    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        if (uri != null) runCatching {
-            ctx.contentResolver.openOutputStream(uri)?.use { it.write(vm.backupJson().toByteArray()) }
-            Toast.makeText(ctx, "Backup saved", Toast.LENGTH_SHORT).show()
-        }.onFailure { Toast.makeText(ctx, "Could not save the backup", Toast.LENGTH_SHORT).show() }
-    }
-    val opener = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            val text = runCatching { ctx.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } }.getOrNull()
-            if (text != null && vm.restoreJson(text)) {
-                Toast.makeText(ctx, "Restored — restarting…", Toast.LENGTH_SHORT).show()
-                ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.component?.let { c ->
-                    ctx.startActivity(Intent.makeRestartActivityTask(c))
-                }
-                Runtime.getRuntime().exit(0)
-            } else Toast.makeText(ctx, "That is not a SUDOPLAY backup", Toast.LENGTH_SHORT).show()
-        }
-    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        SubHeader("Features", onBack)
-        SectionLabel("Playback")
-        SwitchRow("Skip silence", "Jumps over silent gaps inside tracks", s.skipSilence.value) { s.skipSilence.set(it); vm.applyMisc() }
-        SwitchRow("Fade out when the sleep timer ends", "Volume eases down over the last 15 seconds", s.sleepFade.value) { s.sleepFade.set(it) }
-        SwitchRow("Shake to skip", "Shake the phone to jump to the next track (only while playing)", s.shake.value) { s.shake.set(it) }
-        SectionLabel("Smart listening")
-        SwitchRow("Lecture mode", "Recordings longer than ${s.lectureMinutes.value} min remember where you stopped and your speed", s.lectureMode.value) { s.lectureMode.set(it) }
-        SwitchRow("Sound per output", "Remembers your EQ for each headphones / speaker (now: ${vm.outputName})", s.deviceEq.value) { s.deviceEq.set(it) }
-        SwitchRow("Resume when headphones connect", "Starts playing again when Bluetooth or wired audio connects", s.resumeOnConnect.value) { s.resumeOnConnect.set(it) }
-        NavRow(I.Search, "Duplicate finder", "Finds the same song stored twice") { onOpen("dupes") }
-        RowCard {
-            Column(Modifier.weight(1f)) {
-                Text("When you listen", color = t.text, fontWeight = FontWeight.SemiBold)
-                val mx = (vm.hourCounts.maxOrNull() ?: 0).coerceAtLeast(1)
-                Row(Modifier.fillMaxWidth().height(48.dp).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.Bottom) {
-                    vm.hourCounts.forEach { c -> Box(Modifier.weight(1f).fillMaxHeight((0.08f + 0.92f * c / mx)).background(t.primary.copy(alpha = if (c == 0) 0.2f else 0.9f), RoundedCornerShape(2.dp))) }
-                }
-                Text("0h                      12h                    23h", color = t.text.copy(alpha = 0.45f), fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp))
-            }
-        }
-        SectionLabel("Car")
+        SubHeader("Car & launch", onBack)
+        SectionLabel("Car mode")
         RowCard {
             Column(Modifier.weight(1f)) {
                 Text("Car mode", color = t.text, fontWeight = FontWeight.SemiBold)
@@ -661,15 +714,65 @@ private fun FeaturesPage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack: 
         SectionLabel("Player")
         SwitchRow("Keep screen on", "While the player page is open", s.keepScreenOn.value) { s.keepScreenOn.set(it) }
         SwitchRow("Open on lyrics", "Show lyrics first instead of the cover", s.lyricsDefault.value) { s.lyricsDefault.set(it) }
-        SectionLabel("Library")
-        NavRow(I.Whatshot, "Your stats", "Listening time, top tracks, artists and albums") { onOpen("stats") }
-        SwitchRow("Count plays", "Feeds Recently played / Most played / Never played / Mix", s.countPlays.value) { s.countPlays.set(it) }
-        RowCard(onClick = { vm.clearHistory() }) {
+        SectionLabel("Player page")
+        SwitchRow("Keep screen on", "While the player page is open", s.keepScreenOn.value) { s.keepScreenOn.set(it) }
+        SwitchRow("Open on lyrics", "Show lyrics first instead of the cover", s.lyricsDefault.value) { s.lyricsDefault.set(it) }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun OnlineSettingsPage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack: () -> Unit) {
+    val s = vm.settings
+    val t = LocalSudo.current
+    val ctx = LocalContext.current
+    val prefs = remember { ctx.getSharedPreferences("sudoplay", android.content.Context.MODE_PRIVATE) }
+    var suggest by remember { mutableStateOf(prefs.getBoolean("online_suggest", false)) }
+    var hist by remember { mutableStateOf((prefs.getString("online_hist", "") ?: "").split("\n").count { it.isNotBlank() }) }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        SubHeader("Online & privacy", onBack)
+        SectionLabel("Sources")
+        HintLine("Which sources a search uses is chosen in the Online tab (Sources button). Everything works without accounts or API keys.")
+        SwitchRow("Show the Online tab", "YouTube, SoundCloud, Audius, Quran, archive.org, radio and links", s.navOnline.value) { s.navOnline.set(it) }
+        SectionLabel("Privacy")
+        SwitchRow("Search suggestions", "Sends what you type to Google's suggestion service while you type. Off by default", suggest) { suggest = it; prefs.edit().putBoolean("online_suggest", it).apply() }
+        SwitchRow("Download missing lyrics", "Asks lrclib.net (free, no account) when a song has none. Sends only title, artist, album and length", s.autoLyrics.value) { s.autoLyrics.set(it) }
+        NavRow(I.Search, "Network log", "${com.sudosoc.sudoplay.data.NetLog.entries.size} requests since the app started • see exactly what leaves your phone") { onOpen("netlog") }
+        RowCard(onClick = { prefs.edit().remove("online_hist").apply(); hist = 0 }) {
             Icon(I.DeleteSweep, null, tint = t.primary)
             Spacer(Modifier.width(12.dp))
-            TitleSub("Clear play history", "Resets play counts and the recent list", Modifier.weight(1f))
+            TitleSub("Clear online search history", "$hist saved searches", Modifier.weight(1f))
         }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun BackupPage(vm: PlayerViewModel, onBack: () -> Unit) {
+    val t = LocalSudo.current
+    val ctx = LocalContext.current
+    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) runCatching {
+            ctx.contentResolver.openOutputStream(uri)?.use { it.write(vm.backupJson().toByteArray()) }
+            Toast.makeText(ctx, "Backup saved", Toast.LENGTH_SHORT).show()
+        }.onFailure { Toast.makeText(ctx, "Could not save the backup", Toast.LENGTH_SHORT).show() }
+    }
+    val opener = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val text = runCatching { ctx.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } }.getOrNull()
+            if (text != null && vm.restoreJson(text)) {
+                Toast.makeText(ctx, "Restored — restarting…", Toast.LENGTH_SHORT).show()
+                ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.component?.let { c ->
+                    ctx.startActivity(Intent.makeRestartActivityTask(c))
+                }
+                Runtime.getRuntime().exit(0)
+            } else Toast.makeText(ctx, "That is not a SUDOPLAY backup", Toast.LENGTH_SHORT).show()
+        }
+    }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        SubHeader("Backup & about", onBack)
         SectionLabel("Backup")
+        HintLine("One file with your settings, EQ scenes, playlists and play counts. Restoring restarts the app.")
         RowCard(onClick = { saver.launch("sudoplay-backup.json") }) {
             Icon(I.Collections, null, tint = t.primary)
             Spacer(Modifier.width(12.dp))
@@ -680,10 +783,11 @@ private fun FeaturesPage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack: 
             Spacer(Modifier.width(12.dp))
             TitleSub("Restore", "Pick a backup file; the app restarts", Modifier.weight(1f))
         }
+        SectionLabel("About")
+        RowCard { TitleSub("SUDOPLAY ${APP_VERSION}", "A private music player by SUDOSOC • ceo@sudosoc.com", Modifier.weight(1f)) }
         Spacer(Modifier.height(24.dp))
     }
 }
-
 
 // ---------------------------------------------------------------- gesture editor
 @Composable

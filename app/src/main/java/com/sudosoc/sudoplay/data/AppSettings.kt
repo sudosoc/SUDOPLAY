@@ -25,6 +25,8 @@ class AppSettings(prefs: SharedPreferences) {
     // Appearance
     val theme = StringSetting(prefs, "theme", "aurora")
     val playerTheme = StringSetting(prefs, "player_theme", "classic")
+    /** 0 frozen, 1 animated, 2 animated + reacts to the music */
+    val liveMode = IntSetting(prefs, "live_mode", 2)
 
     // Properties (gestures)
     val doubleTap = BoolSetting(prefs, "g_double_tap", true)

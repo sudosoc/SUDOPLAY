@@ -83,7 +83,7 @@ fun Modifier.sudoPanel(shape: Shape = RoundedCornerShape(20.dp)): Modifier {
     val t = LocalSudo.current
     return when (t.style) {
         Style.Solid -> this.clip(shape).background(t.surface)
-        Style.Glass -> this.clip(shape)
+        Style.Glass, Style.Live -> this.clip(shape)
             .background(if (t.dark) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.50f))
             .border(1.dp, (if (t.dark) Color.White else Color.White).copy(alpha = if (t.dark) 0.18f else 0.7f), shape)
         Style.Art -> this.clip(shape)
@@ -143,8 +143,10 @@ fun AppBackdrop(art: Bitmap?) {
                     Brush.verticalGradient(listOf(t.bgTop.copy(alpha = 0.35f), t.bgBottom.copy(alpha = 0.85f)))
                 ))
             }
+            Style.Live -> {}
             Style.Solid, Style.Soft, Style.Outline -> {}
         }
+        t.live?.let { LiveLayer(it, listOf(t.bgTop, t.primary, t.secondary, t.text), animated = true) }
     }
 }
 

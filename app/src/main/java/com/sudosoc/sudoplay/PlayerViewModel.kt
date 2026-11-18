@@ -180,6 +180,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     /** What each online song was found as (so a failed YouTube stream can be retried elsewhere, and so it can be downloaded). */
     val onlineOrigin = HashMap<Long, com.sudosoc.sudoplay.online.OnlineItem>()
     /** Download dialog request, shown on top of everything: (items, group name for a new playlist). */
+    var openStudio by mutableStateOf(false)
     var dlRequest by mutableStateOf<Pair<List<com.sudosoc.sudoplay.online.OnlineItem>, String>?>(null)
     /** "Find this song online": the Online tab picks this up, searches it, and clears it. */
     var onlineQuery by mutableStateOf<String?>(null)

@@ -26,7 +26,7 @@ import androidx.core.view.WindowCompat
 
 /** How surfaces (cards, mini player, bars) are drawn. */
 enum class Style(val label: String) {
-    Glass("Glass"), Gradient("Gradient"), Art("Artwork blur"), Solid("Solid"), Soft("Soft"), Outline("Outline")
+    Live("Live"), Glass("Glass"), Gradient("Gradient"), Art("Artwork blur"), Solid("Solid"), Soft("Soft"), Outline("Outline")
 }
 
 @Immutable
@@ -42,6 +42,7 @@ data class AppTheme(
     val secondary: Color,
     val text: Color,
     val dynamic: Boolean = false,
+    val live: PBg? = null,
 )
 
 private fun c(hex: Long) = Color(hex or 0xFF000000)
@@ -50,10 +51,25 @@ object Themes {
     private fun t(
         id: String, name: String, dark: Boolean, style: Style,
         top: Long, bottom: Long, surface: Long, primary: Long, secondary: Long, text: Long,
-        dynamic: Boolean = false,
-    ) = AppTheme(id, name, dark, style, c(top), c(bottom), c(surface), c(primary), c(secondary), c(text), dynamic)
+        dynamic: Boolean = false, live: PBg? = null,
+    ) = AppTheme(id, name, dark, style, c(top), c(bottom), c(surface), c(primary), c(secondary), c(text), dynamic, live)
 
     val all: List<AppTheme> = listOf(
+        // ---- Live (animated backgrounds) ----
+        t("live-aurora", "Aurora Live", true, Style.Live, 0x040A18, 0x0B1530, 0x16224A, 0x7CF3E0, 0xB07CFF, 0xF2F8FF, live = PBg.Aurora),
+        t("live-rain", "Rainy Night", true, Style.Live, 0x080D17, 0x131C2E, 0x1B2740, 0x9CC4F5, 0x6C8CC0, 0xEAF2FF, live = PBg.Rain),
+        t("live-fireflies", "Fireflies", true, Style.Live, 0x03100A, 0x0A2418, 0x10301F, 0xE8F56B, 0x7CF0A0, 0xF1FFE8, live = PBg.Fireflies),
+        t("live-pulse", "Neon Pulse", true, Style.Live, 0x07030F, 0x14052B, 0x1D0B3D, 0xFF2BD6, 0x00F0FF, 0xFAF0FF, live = PBg.Pulse),
+        t("live-gold-pulse", "Golden Pulse", true, Style.Live, 0x0B0905, 0x1B1508, 0x2A200C, 0xE6C158, 0xFFE29A, 0xFFF8E1, live = PBg.Pulse),
+        t("live-lava", "Lava Lamp", true, Style.Live, 0x1A0510, 0x2E0A1C, 0x3E1228, 0xFF8FB1, 0xFFB36B, 0xFFF1F4, live = PBg.Lava),
+        t("live-snow", "Snowfall", true, Style.Live, 0x0B1A2E, 0x162F4D, 0x1B3A5C, 0xBFE3FF, 0x8EC5FF, 0xF2F8FF, live = PBg.Snow),
+        t("live-matrix", "Code Rain", true, Style.Live, 0x000A02, 0x021A07, 0x042A0E, 0x00FF41, 0x9BFFB8, 0xCFFFD8, live = PBg.Matrix),
+        t("live-bokeh", "Bokeh Gold", true, Style.Live, 0x120C06, 0x2A1B0A, 0x3A280F, 0xFFD27A, 0xFF9A5C, 0xFFF4E0, live = PBg.Bokeh),
+        t("live-ripples", "Ripples", true, Style.Live, 0x031A24, 0x06303F, 0x0A3E50, 0x5EEAD4, 0x38BDF8, 0xE8FBFF, live = PBg.Ripples),
+        t("live-embers", "Embers", true, Style.Live, 0x120504, 0x2A0C06, 0x3A1209, 0xFF9F43, 0xFF4D6D, 0xFFF1E6, live = PBg.Embers),
+        t("live-nebula", "Nebula", true, Style.Live, 0x05030F, 0x120A2E, 0x1B1145, 0xD8B4FE, 0xF9A8D4, 0xF7F0FF, live = PBg.Nebula),
+        t("live-sakeenah", "Sakeenah Lights", true, Style.Live, 0x06201A, 0x0F3D31, 0x12382E, 0xE9D8A6, 0x7FD1AE, 0xF3FBF6, live = PBg.Fireflies),
+        t("live-northern", "Northern Lights", true, Style.Live, 0x02101A, 0x072A33, 0x0C3A44, 0x6EE7B7, 0x67E8F9, 0xEFFFFB, live = PBg.Aurora),
         // ---- Glass ----
         t("aurora", "Aurora", true, Style.Glass, 0x0B1026, 0x1B0F3B, 0x1E2140, 0x7CF3E0, 0xB07CFF, 0xF2F4FF),
         t("frost", "Frost", false, Style.Glass, 0xCFE8FF, 0xEAD7FF, 0xFFFFFF, 0x3A6BFF, 0xFF7AC8, 0x14213D),
@@ -149,8 +165,11 @@ val AppTheme.onAccent: Color
 
 val LocalSudo = staticCompositionLocalOf<AppTheme> { Themes.all[0] }
 
+/** 0 = animated backgrounds frozen, 1 = animated, 2 = animated and reacting to the music. */
+val LocalLiveMode = staticCompositionLocalOf { 2 }
+
 @Composable
-fun SudoPlayTheme(themeId: String, cover: android.graphics.Bitmap? = null, content: @Composable () -> Unit) {
+fun SudoPlayTheme(themeId: String, cover: android.graphics.Bitmap? = null, liveMode: Int = 2, content: @Composable () -> Unit) {
     val ctx = LocalContext.current
     var t = Themes.byId(themeId)
     if (t.dynamic && Build.VERSION.SDK_INT >= 31) {
@@ -192,7 +211,7 @@ fun SudoPlayTheme(themeId: String, cover: android.graphics.Bitmap? = null, conte
             }
         }
     }
-    CompositionLocalProvider(LocalSudo provides t) {
+    CompositionLocalProvider(LocalSudo provides t, LocalLiveMode provides liveMode) {
         MaterialTheme(colorScheme = scheme, content = content)
     }
 }

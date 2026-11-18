@@ -743,6 +743,11 @@ fun PlayerBackground(pt: PlayerTheme, art: Bitmap?, animated: Boolean, content: 
                 content()
             }
         }
+        PBg.Aurora, PBg.Rain, PBg.Fireflies, PBg.Pulse, PBg.Lava, PBg.Snow, PBg.Matrix, PBg.Bokeh, PBg.Ripples, PBg.Embers, PBg.Nebula ->
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(c0, (pt.colors.getOrNull(1) ?: c0).copy(alpha = 0.35f).compositeOver(c0))))) {
+                LiveLayer(pt.bg, pt.colors, animated)
+                content()
+            }
         PBg.Mesh -> Box(Modifier.fillMaxSize().background(c0)) {
             Box(Modifier.fillMaxSize().drawBehind {
                 val spots = listOf(Offset(0f, 0f) to c0, Offset(size.width, size.height * 0.30f) to c1, Offset(0f, size.height * 0.72f) to c2, Offset(size.width, size.height) to c3)

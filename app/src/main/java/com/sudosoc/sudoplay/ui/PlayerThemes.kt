@@ -4,7 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 
 /** Where the Now Playing page gets its background from. */
-enum class PBg { App, ArtBlur, ArtGradient, FullBleed, Gradient, Blobs, Spotlight, Waves, Spectrum, Stars, Mesh }
+enum class PBg { App, ArtBlur, ArtGradient, FullBleed, Gradient, Blobs, Spotlight, Waves, Spectrum, Stars, Mesh, Aurora, Rain, Fireflies, Pulse, Lava, Snow, Matrix, Bokeh, Ripples, Embers, Nebula }
 
 /** How the cover is framed. */
 enum class PShape { Rounded, Squircle, Circle, Poster, Polaroid, Stack, Square, Hexagon, Diamond, Wide, Frame }
@@ -111,6 +111,35 @@ object PlayerThemes {
             controls = PControls.Outline, accent = c(0x39FF6A), accent2 = c(0x9BFFB8), dark = true, text = c(0xC9FFD8)),
         PlayerTheme("arctic", "Arctic", bg = PBg.Waves, colors = listOf(c(0xEAF6FF), c(0x7CC4FF), c(0xBFE3FF)), shape = PShape.Squircle,
             controls = PControls.Pill, accent = c(0x1E78D6), accent2 = c(0x4FB3FF), dark = false, text = c(0x0F2A44)),
+        // ---- v0.11: live backgrounds (they move; the Pulse / rain / code-rain layers also react to the music)
+        PlayerTheme("aurora-live", "Aurora Live", bg = PBg.Aurora, colors = listOf(c(0x040A18), c(0x2DFFB3), c(0x6C5CFF), c(0xFF5CC8), c(0x38BDF8)), shape = PShape.Squircle,
+            controls = PControls.Glass, accent = c(0x7CF3E0), accent2 = c(0xB07CFF), dark = true, text = c(0xF2F8FF)),
+        PlayerTheme("rain-night", "Rainy Night", bg = PBg.Rain, colors = listOf(c(0x080D17), c(0x8FB4E3), c(0x3E5C85)), shape = PShape.Rounded,
+            controls = PControls.Glass, accent = c(0x9CC4F5), accent2 = c(0x6C8CC0), dark = true, text = c(0xEAF2FF)),
+        PlayerTheme("fireflies", "Fireflies", bg = PBg.Fireflies, colors = listOf(c(0x03100A), c(0xE8F56B), c(0x7CF0A0)), shape = PShape.Circle, ring = true,
+            controls = PControls.Outline, accent = c(0xE8F56B), accent2 = c(0x7CF0A0), dark = true, text = c(0xF1FFE8)),
+        PlayerTheme("pulse-neon", "Neon Pulse", bg = PBg.Pulse, colors = listOf(c(0x07030F), c(0xFF2BD6), c(0x00F0FF)), shape = PShape.Rounded, glow = true,
+            controls = PControls.Neon, accent = c(0xFF2BD6), accent2 = c(0x00F0FF), dark = true, text = c(0xFAF0FF)),
+        PlayerTheme("pulse-gold", "Golden Pulse", bg = PBg.Pulse, colors = listOf(c(0x0B0905), c(0xE6C158), c(0xFFF1B8)), shape = PShape.Circle, spin = true, ring = true,
+            controls = PControls.Outline, accent = c(0xE6C158), accent2 = c(0xFFE29A), dark = true, text = c(0xFFF8E1)),
+        PlayerTheme("lava-lamp", "Lava Lamp", bg = PBg.Lava, colors = listOf(c(0x1A0510), c(0xFF5C74), c(0xFFB36B), c(0xB07CFF)), shape = PShape.Squircle,
+            controls = PControls.Pill, accent = c(0xFFD0A8), accent2 = c(0xFF8FB1), dark = true, text = c(0xFFF1F4)),
+        PlayerTheme("snowfall", "Snowfall", bg = PBg.Snow, colors = listOf(c(0x0B1A2E), c(0x1B3A5C)), shape = PShape.Rounded,
+            controls = PControls.Glass, accent = c(0xBFE3FF), accent2 = c(0x8EC5FF), dark = true, text = c(0xF2F8FF)),
+        PlayerTheme("code-rain", "Code Rain", bg = PBg.Matrix, colors = listOf(c(0x000A02), c(0x00FF41)), shape = PShape.Square,
+            controls = PControls.Outline, accent = c(0x00FF41), accent2 = c(0x9BFFB8), dark = true, text = c(0xCFFFD8)),
+        PlayerTheme("bokeh-gold", "Bokeh Gold", bg = PBg.Bokeh, colors = listOf(c(0x120C06), c(0xFFC857), c(0xFF8A3D), c(0xFFE9A8)), shape = PShape.Circle, spin = true, ring = true,
+            controls = PControls.Glass, accent = c(0xFFD27A), accent2 = c(0xFF9A5C), dark = true, text = c(0xFFF4E0)),
+        PlayerTheme("ripples", "Ripples", bg = PBg.Ripples, colors = listOf(c(0x031A24), c(0x5EEAD4), c(0x38BDF8)), shape = PShape.Circle, ring = true,
+            controls = PControls.Glass, accent = c(0x5EEAD4), accent2 = c(0x38BDF8), dark = true, text = c(0xE8FBFF)),
+        PlayerTheme("embers", "Embers", bg = PBg.Embers, colors = listOf(c(0x120504), c(0xFF6A1F), c(0xFFC857)), shape = PShape.Rounded, glow = true,
+            controls = PControls.Gradient, accent = c(0xFF9F43), accent2 = c(0xFF4D6D), dark = true, text = c(0xFFF1E6)),
+        PlayerTheme("nebula", "Nebula", bg = PBg.Nebula, colors = listOf(c(0x05030F), c(0x7C3AED), c(0xEC4899), c(0x38BDF8)), shape = PShape.Diamond,
+            controls = PControls.Glass, accent = c(0xD8B4FE), accent2 = c(0xF9A8D4), dark = true, text = c(0xF7F0FF)),
+        PlayerTheme("sakeenah-lights", "Sakeenah Lights", bg = PBg.Fireflies, colors = listOf(c(0x06201A), c(0xE9D8A6), c(0x7FD1AE)), shape = PShape.Circle, ring = true,
+            controls = PControls.Outline, accent = c(0xE9D8A6), accent2 = c(0x7FD1AE), dark = true, text = c(0xF3FBF6)),
+        PlayerTheme("northern", "Northern Lights", bg = PBg.Aurora, colors = listOf(c(0x02101A), c(0x34D399), c(0x22D3EE), c(0xA78BFA)), shape = PShape.Circle, spin = true,
+            controls = PControls.Pill, accent = c(0x6EE7B7), accent2 = c(0x67E8F9), dark = true, text = c(0xEFFFFB)),
         PlayerTheme("vapor", "Vaporwave", bg = PBg.Stars, colors = listOf(c(0x1B0B3B), c(0x5B1E8F)), shape = PShape.Diamond,
             controls = PControls.Neon, accent = c(0xFF71CE), accent2 = c(0x01CDFE), dark = true, text = c(0xFFE9FB)),
     )
