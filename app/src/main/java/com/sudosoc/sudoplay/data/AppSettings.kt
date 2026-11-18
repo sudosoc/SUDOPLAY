@@ -93,6 +93,7 @@ class AppSettings(prefs: SharedPreferences) {
     val navAlbums = BoolSetting(prefs, "n_albums", true)
     val navBrowse = BoolSetting(prefs, "n_browse", true)
     val navPlaylists = BoolSetting(prefs, "n_playlists", true)
+    val navOnline = BoolSetting(prefs, "n_online", true)
     /** bottom | top | left | right */
     val navPos = StringSetting(prefs, "n_pos", "bottom")
 

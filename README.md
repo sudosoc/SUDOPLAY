@@ -66,3 +66,13 @@ Android music player — Kotlin, Jetpack Compose, Media3 (ExoPlayer).
 - **Parametric EQ**: 5 peaking bands (frequency / gain / Q) in the built-in DSP, with presets (Clear vocals, Warm, Bright, Cut mud, Quran / speech).
 - **Themes**: Sakeenah, Madinah Dawn, Desert Night, Nile, Soft Sand, Soft Slate, Emerald Line, Red Line; 5 new player themes; seek styles Stairs, Zigzag, Tape.
 - **Search** ignores Arabic diacritics and alef/yaa/taa-marbuta variants; new sorts (Most played, Longest); friendlier empty state.
+
+## v0.8 — Online (no account, no API key)
+
+New **Online** tab (can be hidden from Appearance → Navigation bar):
+- **SoundCloud** search and streaming (HLS AAC) through NewPipeExtractor.
+- **YouTube** search through NewPipeExtractor. Playback depends on YouTube accepting the request (it often blocks datacenter IPs and increasingly asks for tokens), so treat it as best-effort; when a stream is refused the app says so.
+- **Radio** from the community radio-browser.info directory (empty search = most popular).
+- **Link**: paste a YouTube/SoundCloud page or any direct audio / HLS stream.
+- Online tracks can be queued (Play next / Add to queue), show their cover in the player and notification, and every request is listed in the Network log. Audio itself streams straight from its source.
+- `OnlineLiveTest` (ignored by default) probes the extractors against the live internet.

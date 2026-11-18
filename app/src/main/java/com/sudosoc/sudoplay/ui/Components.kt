@@ -52,7 +52,7 @@ fun rememberArt(song: Song?, size: Int): State<Bitmap?> {
     val ctx = LocalContext.current
     val ver = CoverStore.version
     return produceState<Bitmap?>(null, song?.id, size, ver) {
-        value = if (song == null) null else withContext(Dispatchers.IO) { ArtLoader.load(ctx, song.uri, size) }
+        value = if (song == null) null else withContext(Dispatchers.IO) { ArtLoader.load(ctx, song.artUrl?.let { android.net.Uri.parse(it) } ?: song.uri, size) }
     }
 }
 

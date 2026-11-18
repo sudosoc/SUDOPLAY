@@ -23,7 +23,27 @@ object ArtLoader {
         synchronized(missing) { missing.clear() }
     }
 
+    private val netClient by lazy { okhttp3.OkHttpClient.Builder().connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS).readTimeout(15, java.util.concurrent.TimeUnit.SECONDS).build() }
+
+    private fun loadHttp(uri: Uri, size: Int): Bitmap? {
+        val key = "$uri:$size"
+        cache.get(key)?.let { return it }
+        synchronized(missing) { if (key in missing) return null }
+        val bmp = runCatching {
+            netClient.newCall(okhttp3.Request.Builder().url(uri.toString()).build()).execute().use { r ->
+                val bytes = r.body?.bytes() ?: return@use null
+                val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
+                var s = 1; while (o.outWidth / (s * 2) >= size && o.outHeight / (s * 2) >= size) s *= 2
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = s })
+            }
+        }.getOrNull()
+        if (bmp != null) cache.put(key, bmp) else synchronized(missing) { missing.add(key) }
+        return bmp
+    }
+
     fun load(ctx: Context, songUri: Uri, size: Int): Bitmap? {
+        if (songUri.scheme == "http" || songUri.scheme == "https") return loadHttp(songUri, size)
         val id = ContentUris.parseId(songUri)
         val key = "$id:$size"
         cache.get(key)?.let { return it }

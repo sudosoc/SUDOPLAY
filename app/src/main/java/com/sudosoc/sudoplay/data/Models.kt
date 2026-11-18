@@ -14,6 +14,9 @@ data class Song(
     val track: Int,
     val folder: String = "",
     val path: String = "",
+    /** Online items only: where the cover comes from, and a flag so local-only features can skip them. */
+    val artUrl: String? = null,
+    val online: Boolean = false,
 )
 
 data class Playlist(val id: String, val name: String, val songIds: List<Long>)

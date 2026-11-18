@@ -164,7 +164,7 @@ private fun HomePage(vm: PlayerViewModel, onOpen: (String) -> Unit) {
         BigSection(I.Tune, "Properties", "الخصائص", "Gestures, seek sensitivity, vibration") { onOpen("props") }
         BigSection(I.AutoAwesome, "Features", "المميزات", "Sound, lyrics, play history, backup") { onOpen("features") }
         BigSection(I.Explore, "Car mode", "وضع السيارة", "Big landscape screen for the head unit") { vm.carMode = true }
-        Text("SUDOPLAY 0.7.0 • by SUDOSOC", color = t.text.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall,
+        Text("SUDOPLAY 0.8.0 • by SUDOSOC", color = t.text.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(20.dp))
     }
 }
@@ -550,6 +550,7 @@ private fun NavBarPage(vm: PlayerViewModel, onBack: () -> Unit) {
         SwitchRow("Albums", null, s.navAlbums.value) { s.navAlbums.set(it) }
         SwitchRow("Browse", "Artists and folders", s.navBrowse.value) { s.navBrowse.set(it) }
         SwitchRow("Playlists", null, s.navPlaylists.value) { s.navPlaylists.set(it) }
+        SwitchRow("Online", "YouTube, SoundCloud, radio and links — no account or API key", s.navOnline.value) { s.navOnline.set(it) }
         RowCard { TitleSub("Settings", "Always shown so you can never lock yourself out", Modifier.weight(1f)) }
         Spacer(Modifier.height(24.dp))
     }

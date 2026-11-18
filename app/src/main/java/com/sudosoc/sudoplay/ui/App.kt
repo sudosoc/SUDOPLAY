@@ -38,6 +38,7 @@ private fun tabsList(vm: PlayerViewModel): List<Tab> {
         if (st.navAlbums.value) add(Tab(1, "Albums", I.Album))
         if (st.navBrowse.value) add(Tab(2, "Browse", I.Folder))
         if (st.navPlaylists.value) add(Tab(3, "Playlists", I.LibraryMusic))
+        if (st.navOnline.value) add(Tab(5, "Online", I.Explore))
         add(Tab(4, "Settings", I.Settings))
     }
 }
@@ -113,6 +114,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                                 1 -> AlbumsTab(vm) { detail = it }
                                 2 -> BrowseTab(vm) { detail = it }
                                 3 -> PlaylistsTab(vm) { detail = it }
+                                5 -> OnlineTab(vm)
                                 else -> SettingsTab(vm)
                             }
                         }

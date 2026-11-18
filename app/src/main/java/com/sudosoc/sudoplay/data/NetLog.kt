@@ -4,7 +4,7 @@ import androidx.compose.runtime.mutableStateListOf
 
 /**
  * Every network request SUDOPLAY ever makes is written here, so you can see exactly what leaves the phone.
- * (At the moment the only thing that can touch the network is the optional lyrics download.)
+ * (The network is only used by the optional lyrics download and the Online tab; the audio itself, once it plays, streams straight from its source.)
  */
 class NetEntry(val time: Long, val method: String, val host: String, val path: String, val status: Int, val bytes: Long, val ms: Long)
 

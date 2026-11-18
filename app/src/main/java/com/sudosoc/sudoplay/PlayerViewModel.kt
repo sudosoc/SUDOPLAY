@@ -105,6 +105,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private val analysisLock = Mutex()
     private val analysing = HashSet<Long>()
     private fun analyzeSong(s: Song, forCurrent: Boolean) {
+        if (s.online) return
         if (!analysing.add(s.id)) return
         viewModelScope.launch {
             val r = withContext(Dispatchers.IO) { analysisLock.withLock { Analyzer.analyze(ctx, s.id, s.uri, s.durationMs) } }
@@ -164,6 +165,33 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun whenReady(a: () -> Unit) { if (controller != null && songs.isNotEmpty()) a() else readyActions += a }
     private fun flushReady() { if (controller != null && songs.isNotEmpty() && readyActions.isNotEmpty()) { val l = readyActions.toList(); readyActions.clear(); l.forEach { it() } } }
     fun appContext() = ctx
+    // ---- online (YouTube / SoundCloud / radio / links) ----
+    val onlineSongs = HashMap<Long, Song>()
+    var onlineBusy by mutableStateOf<String?>(null); private set
+    var onlineError by mutableStateOf<String?>(null)
+    /** mode 0 = play now, 1 = play next, 2 = add to queue */
+    fun playOnline(item: com.sudosoc.sudoplay.online.OnlineItem, mode: Int = 0) {
+        if (onlineBusy != null) return
+        onlineBusy = item.url; onlineError = null
+        viewModelScope.launch {
+            try {
+                val s = com.sudosoc.sudoplay.online.Online.resolve(item)
+                onlineSongs[s.id] = s
+                val c = controller
+                if (mode == 0 || c == null || c.mediaItemCount == 0) play(listOf(s), 0)
+                else if (mode == 1) c.addMediaItem(c.currentMediaItemIndex + 1, toItem(s))
+                else c.addMediaItem(toItem(s))
+            } catch (e: Throwable) {
+                onlineError = (e.message ?: e.javaClass.simpleName).take(160)
+            } finally { onlineBusy = null }
+        }
+    }
+    fun playOnlineLink(link: String) {
+        viewModelScope.launch {
+            try { playOnline(com.sudosoc.sudoplay.online.Online.fromLink(link)) } catch (e: Throwable) { onlineError = (e.message ?: "Bad link").take(160) }
+        }
+    }
+
     var infoSong by mutableStateOf<Song?>(null)
     fun shuffleAll() { val l = songs; if (l.isNotEmpty()) play(l, l.indices.random(), true) }
     fun resumeNow() { controller?.let { if (it.mediaItemCount > 0) it.play() else shuffleAll() } }
@@ -289,6 +317,16 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = sync()
+        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            val cur = current
+            if (cur?.online == true) {
+                val http403 = (error.cause as? androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)?.responseCode
+                onlineError = when {
+                    http403 == 403 || http403 == 410 -> "The source refused this stream (HTTP $http403). YouTube does this often — try SoundCloud or radio, or search again later."
+                    else -> "Playback failed: ${error.errorCodeName}"
+                }
+            }
+        }
     }
 
     init {
@@ -297,6 +335,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         future.addListener({
             runCatching { future.get() }.getOrNull()?.let {
                 controller = it; flushReady()
+                // online items can be muxed video files; we only ever want their sound
+                it.trackSelectionParameters = it.trackSelectionParameters.buildUpon().setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_VIDEO, true).build()
                 it.addListener(listener)
                 if (it.mediaItemCount > 0) restored = true
                 sync()
@@ -361,6 +401,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     // ---- remember the queue between launches ----
     private fun saveQueue() {
         val c = controller ?: return
+        if (current?.online == true) return
         if (c.mediaItemCount == 0) return
         val ids = (0 until c.mediaItemCount).joinToString(",") { c.getMediaItemAt(it).mediaId }
         prefs.edit().putString("q_ids", ids).putInt("q_idx", c.currentMediaItemIndex).putLong("q_pos", c.currentPosition).apply()
@@ -386,9 +427,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         shuffle = c.shuffleModeEnabled
         repeatMode = c.repeatMode
         speed = c.playbackParameters.speed
-        queue = (0 until c.mediaItemCount).mapNotNull { byId[c.getMediaItemAt(it).mediaId.toLongOrNull()] }
+        queue = (0 until c.mediaItemCount).mapNotNull { c.getMediaItemAt(it).mediaId.toLongOrNull()?.let { id -> byId[id] ?: onlineSongs[id] } }
         queueIndex = c.currentMediaItemIndex
-        current = byId[c.currentMediaItem?.mediaId?.toLongOrNull()]
+        current = c.currentMediaItem?.mediaId?.toLongOrNull()?.let { id -> byId[id] ?: onlineSongs[id] }
         duration = c.duration.takeIf { it > 0 } ?: current?.durationMs ?: 0L
         position = c.currentPosition
 
@@ -517,7 +558,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(s.title).setArtist(s.artist).setAlbumTitle(s.album)
-                .setArtworkUri(s.uri)
+                .setArtworkUri(s.artUrl?.let { android.net.Uri.parse(it) } ?: s.uri)
                 .build()
         ).build()
 
