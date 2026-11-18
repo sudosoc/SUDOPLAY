@@ -1,6 +1,10 @@
 # SUDOPLAY
 
-Android music player — Kotlin, Jetpack Compose, Media3 (ExoPlayer).
+Android music player (Kotlin, Jetpack Compose, Media3) — local library, 10-band parametric EQ, live themes, and an online tab (Quran, YouTube, SoundCloud, Audius, archive.org, radio) with no account or API key.
+
+**Download:** grab the APK from the [Releases](../../releases) page and sideload it (debug-signed). A release is built automatically from `main` whenever `versionName` in `app/build.gradle.kts` is new.
+
+---
 
 ## Done (v0.1)
 - Local library from MediaStore (songs / albums / artists), search, sort, shuffle

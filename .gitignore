@@ -4,3 +4,7 @@ local.properties
 *.iml
 .idea/
 captures/
+.kotlin/
+*.apk
+*.log
+.DS_Store
