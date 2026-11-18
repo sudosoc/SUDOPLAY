@@ -77,6 +77,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.Player
 import com.sudosoc.sudoplay.PlayerViewModel
+import com.sudosoc.sudoplay.online.DownloadCenter
 import com.sudosoc.sudoplay.data.AppSettings
 import com.sudosoc.sudoplay.data.Song
 import com.sudosoc.sudoplay.playback.FxBus
@@ -188,7 +189,7 @@ private fun PlayerContent(vm: PlayerViewModel, pt: PlayerTheme, sheet: SheetStat
             "cover" -> song?.let { coverFor = it }
             "carmode" -> { vm.carMode = true; sheet.close() }
             "bookmark" -> { vm.addBookmark(); android.widget.Toast.makeText(vm.appContext(), "Bookmarked", android.widget.Toast.LENGTH_SHORT).show() }
-            "download" -> song?.let { s -> vm.onlineOrigin[s.id]?.let { vm.dlRequest = listOf(it) to "" } ?: android.widget.Toast.makeText(vm.appContext(), "Only online songs can be downloaded", android.widget.Toast.LENGTH_SHORT).show() }
+            "download" -> song?.let { s -> vm.onlineOrigin[s.id]?.let { DownloadCenter.downloadNow(listOf(it)) } ?: android.widget.Toast.makeText(vm.appContext(), "Only online songs can be downloaded", android.widget.Toast.LENGTH_SHORT).show() }
             "clip" -> song?.let { vm.clipSong = it; sheet.close() }
             "close" -> { vm.haptics.tick(); sheet.close() }
         }

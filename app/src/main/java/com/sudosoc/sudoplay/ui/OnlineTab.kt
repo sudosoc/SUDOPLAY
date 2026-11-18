@@ -247,7 +247,7 @@ private fun CollectionScreen(vm: PlayerViewModel, item: OnlineItem, onBack: () -
         }
         if (files.isNotEmpty()) Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OnlinePill("Play all (${files.size})", true) { vm.playOnlineAll(files, files.first()) }
-            OnlinePill("Download all", false) { onDownload(files, item.title) }
+            OnlinePill("Download all", false) { DownloadCenter.downloadNow(files) }
         }
         val reciterKey = item.collection?.takeIf { it.startsWith("q:") && it.count { c -> c == ':' } == 1 }
         if (reciterKey != null) Row(Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
@@ -301,7 +301,10 @@ private fun OnlineRow(item: OnlineItem, vm: PlayerViewModel, onOpen: (OnlineItem
             SudoMenu(menu, { menu = false }) {
                 DropdownMenuItem(text = { Text("Play next") }, onClick = { vm.playOnline(item, 1); menu = false })
                 DropdownMenuItem(text = { Text("Add to queue") }, onClick = { vm.playOnline(item, 2); menu = false })
-                if (item.kind != OnlineKind.Radio) DropdownMenuItem(text = { Text("Download…") }, onClick = { onDownload(item); menu = false })
+                if (item.kind != OnlineKind.Radio) {
+                    DropdownMenuItem(text = { Text("Download") }, onClick = { DownloadCenter.downloadNow(listOf(item)); menu = false })
+                    DropdownMenuItem(text = { Text("Download… (choose quality)") }, onClick = { onDownload(item); menu = false })
+                }
             }
         }
     }
@@ -326,22 +329,21 @@ fun DownloadDialog(vm: PlayerViewModel, items: List<OnlineItem>, groupName: Stri
         title = { Text(if (bulk) "Download ${items.size} files" else "Download", color = t.text) },
         confirmButton = {
             TextButton(onClick = {
-                val o = opts ?: return@TextButton
+                val o = opts.orEmpty()
                 val plId = when (plChoice) {
                     "none" -> null
                     "new" -> vm.store.create(newName.ifBlank { items.first().title }).id
                     else -> plChoice
                 }
                 // not tied to this dialog's lifetime: it closes right after, and the queue must survive that
-                kotlinx.coroutines.MainScope().launch {
-                    items.forEach { it0 ->
-                        val option = if (bulk) runCatching { DownloadCenter.options(it0).firstOrNull() }.getOrNull() else o.getOrNull(pick)
-                        if (option != null) DownloadCenter.enqueue(it0.title, it0.subtitle.substringBefore(" • "), option, plId)
-                    }
-                }
-                Toast.makeText(ctx, "Downloading — see Downloads", Toast.LENGTH_SHORT).show()
+                // a quality you picked is used as is; otherwise (bulk, nothing listed, or the lookup failed) the default chain decides
+                val chosen = if (!bulk) o.getOrNull(pick) else null
+                if (chosen != null && items.size == 1) {
+                    DownloadCenter.enqueue(items.first().title, items.first().subtitle.substringBefore(" • "), chosen, plId)
+                    Toast.makeText(ctx, "Downloading — see Downloads", Toast.LENGTH_SHORT).show()
+                } else DownloadCenter.downloadNow(items, plId)
                 onClose()
-            }, enabled = opts?.isNotEmpty() == true) { Text("Download", color = t.primary) }
+            }) { Text("Download", color = t.primary) }
         },
         dismissButton = { TextButton(onClose) { Text("Cancel", color = t.text.copy(alpha = 0.7f)) } },
         text = {
@@ -349,9 +351,8 @@ fun DownloadDialog(vm: PlayerViewModel, items: List<OnlineItem>, groupName: Stri
                 Text(if (bulk) groupName.ifBlank { items.first().title } else items.first().title, color = t.text, fontWeight = FontWeight.SemiBold, maxLines = 2)
                 Text("Quality", color = t.text.copy(alpha = 0.6f), fontSize = 12.sp)
                 when {
-                    err != null -> Text(err!!, color = t.text, fontSize = 13.sp)
+                    err != null || opts?.isEmpty() == true -> Text("No quality list from this source — Download will use the app's default source (the stream it plays, or the same song from another source).", color = t.text, fontSize = 13.sp)
                     opts == null -> CircularProgressIndicator(Modifier.size(22.dp), color = t.primary, strokeWidth = 2.dp)
-                    opts!!.isEmpty() -> Text("This can't be downloaded.", color = t.text)
                     bulk -> Text(opts!!.first().label + " — each file in its original quality", color = t.text, fontSize = 13.sp)
                     else -> opts!!.forEachIndexed { i, o ->
                         Row(Modifier.fillMaxWidth().clickable { pick = i }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {

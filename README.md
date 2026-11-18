@@ -104,3 +104,7 @@ New **Online** tab (can be hidden from Appearance → Navigation bar):
 - **Live themes**: 14 animated app themes (Aurora, Rain, Fireflies, Neon/Golden Pulse, Lava, Snow, Code rain, Bokeh, Ripples, Embers, Nebula, Sakeenah Lights, Northern Lights) and 14 matching player themes. Setting: Still / Moving / With music (pulses and glows follow the bass).
 - **Settings reorganised** into Look & feel · Listening · Your stuff, with a hint under every option: Appearance, Sound & playback, Gestures & feedback, Car & launch, Library & files, Online & privacy, Backup & about.
 - Cross-fade between tabs and settings pages, highlighted nav tab, branded settings header.
+
+## v0.11.1
+
+- **One-tap download**: "Download" in the Online menu, "Download all" and the player's download action now start immediately with the best quality. If the source lists no qualities, the stream the app plays is used; if that fails, the same song is found on SoundCloud / Audius. "Download… (choose quality)" keeps the picker, and its Download button is never disabled any more.

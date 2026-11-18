@@ -83,10 +83,55 @@ object DownloadCenter {
         }
     }
 
+    /** The stream the app itself would play for this item, as a download option. */
+    private suspend fun asPlayed(item: OnlineItem): DlOption {
+        val url = Online.resolve(item).uri.toString()
+        val ext = url.substringBefore('?').substringAfterLast('.', "").lowercase().let { if (it.length in 2..4 && it.all(Char::isLetterOrDigit)) it else "m4a" }
+        return DlOption("As played in the app", url, ext, url.contains(".m3u8"))
+    }
+
+    /**
+     * What a one-tap download uses: the best quality the source lists; if it lists none (or refuses), the stream the app plays;
+     * if that fails too, the same song from another source (SoundCloud / Audius). Null only when nothing worked.
+     */
+    suspend fun best(item: OnlineItem): DlOption? {
+        if (item.kind == OnlineKind.Radio) return null
+        runCatching { options(item).firstOrNull() }.getOrNull()?.let { return it }
+        runCatching { asPlayed(item) }.getOrNull()?.let { return it }
+        val alt = runCatching { Online.alternative(item) }.getOrNull() ?: return null
+        return runCatching { options(alt).firstOrNull() }.getOrNull() ?: runCatching { asPlayed(alt) }.getOrNull()
+    }
+
+    /** One tap: no questions asked. Starts every item in the background and says what happened. */
+    fun downloadNow(items: List<OnlineItem>, playlistId: String? = null) {
+        if (items.isEmpty()) return
+        toast(if (items.size == 1) "Looking for the best source…" else "Starting ${items.size} downloads…")
+        scope.launch {
+            var ok = 0
+            val failed = ArrayList<String>()
+            for (it0 in items) {
+                val o = best(it0)
+                if (o == null) { failed.add(it0.title); continue }
+                withContext(Dispatchers.Main) { enqueue(it0.title, it0.subtitle.substringBefore(" • "), o, playlistId) }
+                ok++
+            }
+            toast(when {
+                failed.isEmpty() -> if (ok == 1) "Downloading — see Downloads" else "Downloading $ok files — see Downloads"
+                ok == 0 -> "Couldn't find a downloadable source for " + failed.first().take(40) + if (failed.size > 1) " (+${failed.size - 1} more)" else ""
+                else -> "Downloading $ok, ${failed.size} had no source"
+            })
+        }
+    }
+
+    private fun toast(msg: String) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post { android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show() }
+    }
+
     fun enqueue(title: String, artist: String, option: DlOption, playlistId: String?) {
         val job = DlJob(next++, title, artist, option, playlistId)
         jobs.add(0, job)
-        ContextCompat.startForegroundService(ctx, Intent(ctx, DownloadService::class.java))
+        // the notification is a bonus: if the system refuses to start the service, the download itself still runs
+        runCatching { ContextCompat.startForegroundService(ctx, Intent(ctx, DownloadService::class.java)) }
         job.job = scope.launch {
             gate.withPermit {
                 try {
