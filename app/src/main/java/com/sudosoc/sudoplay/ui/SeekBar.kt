@@ -32,6 +32,7 @@ val SeekStyles: List<Pair<String, String>> = listOf(
     "classic" to "Classic", "linedot" to "Line + dot", "thick" to "Thick pill", "glow" to "Neon glow",
     "wave" to "Wave", "segments" to "Segments", "bars" to "Waveform", "dots" to "Dots",
     "blocks" to "Blocks", "ruler" to "Ruler", "liquid" to "Liquid", "hairline" to "Hairline", "live" to "Live spectrum",
+    "stairs" to "Stairs", "zigzag" to "Zigzag", "tape" to "Tape",
 )
 
 /** Real peak envelope of the playing song (160 bins, 0..1) when the analyser has finished; null before that. */
@@ -83,7 +84,7 @@ fun SeekBar(
         }
     }
 
-    val h = when (style) { "bars", "live", "wave" -> 52.dp; "ruler" -> 46.dp; else -> 38.dp }
+    val h = when (style) { "bars", "live", "wave", "stairs" -> 52.dp; "ruler" -> 46.dp; else -> 38.dp }
     Canvas(modifier.fillMaxWidth().height(h).then(gesture)) {
         val phase = phaseState.value
         val on = t.primary
@@ -127,6 +128,34 @@ fun SeekBar(
                 )
             }
             "bars" -> bars(p, on, off, if (wave != null) 80 else 56, seed, 3f, wave)
+            "stairs" -> {
+                val n = 24; val gap = 3.dp.toPx(); val bw = (size.width - gap * (n - 1)) / n
+                for (i in 0 until n) {
+                    val f = (i + 0.5f) / n; val hh = size.height * (0.18f + 0.72f * (i / (n - 1f)))
+                    drawRoundRect(if (f <= p) lerp(on, t.secondary, f) else off, Offset(i * (bw + gap), size.height - hh - 4.dp.toPx()), Size(bw, hh), CornerRadius(2.dp.toPx()))
+                }
+            }
+            "zigzag" -> {
+                val mid = size.height / 2; val x = size.width * p; val step = 9.dp.toPx(); val amp = 7.dp.toPx()
+                fun zz(from: Float, to: Float) = Path().apply {
+                    var px = from; var up = ((from / step).toInt() % 2 == 0)
+                    moveTo(px, mid + if (up) -amp else amp)
+                    while (px < to) { px = (px + step).coerceAtMost(to); up = !up; lineTo(px, mid + if (up) -amp else amp) }
+                }
+                drawPath(zz(x, size.width), off, style = Stroke(2.5.dp.toPx(), cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+                drawPath(zz(0f, x), on, style = Stroke(3.5.dp.toPx(), cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+                drawCircle(on, 5.dp.toPx(), Offset(x, mid))
+            }
+            "tape" -> {
+                val y = size.height / 2; val x = size.width * p; val n = 60
+                for (i in 0..n) {
+                    val px = size.width * i / n; val major = i % 5 == 0
+                    val len = (if (major) 14 else 7).dp.toPx()
+                    drawLine(if (px <= x) on else off, Offset(px, y - len / 2), Offset(px, y + len / 2), (if (major) 2f else 1.2f).dp.toPx(), StrokeCap.Round)
+                }
+                drawLine(Color.White, Offset(x, 2.dp.toPx()), Offset(x, size.height - 2.dp.toPx()), 2.5.dp.toPx(), StrokeCap.Round)
+                drawCircle(on, 4.dp.toPx(), Offset(x, 2.dp.toPx()))
+            }
             "dots" -> {
                 val n = 30; val y = size.height / 2
                 for (i in 0 until n) {

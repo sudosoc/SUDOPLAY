@@ -63,6 +63,10 @@ object Themes {
         t("emerald-glass", "Emerald Glass", true, Style.Glass, 0x03150F, 0x0A3B2C, 0x0E3B2C, 0x6EE7B7, 0x34D399, 0xE8FFF5),
         t("rose-glass", "Rosé Glass", true, Style.Glass, 0x2B0A1C, 0x5A1B3C, 0x3A1328, 0xFF9EC7, 0xFFC27A, 0xFFEFF6),
         t("midnight-glass", "Midnight Glass", true, Style.Glass, 0x0A0F24, 0x1B2A5A, 0x16204A, 0x8EA8FF, 0xA78BFA, 0xEEF1FF),
+        t("sakeenah", "Sakeenah", true, Style.Glass, 0x06201A, 0x0F3D31, 0x12382E, 0xE9D8A6, 0x7FD1AE, 0xF3FBF6),
+        t("madinah", "Madinah Dawn", false, Style.Glass, 0xEFF7EC, 0xFBF1D8, 0xFFFFFF, 0x1E7F5C, 0xC8963E, 0x14301F),
+        t("desert", "Desert Night", true, Style.Glass, 0x1D1209, 0x4A2E17, 0x33200F, 0xFFC27A, 0xE07A5F, 0xFFF1E0),
+        t("nile", "Nile", true, Style.Glass, 0x04171C, 0x0B3B3A, 0x0C2E30, 0x6FE3C1, 0xF2C94C, 0xE9FBF6),
         t("gold-glass", "Gold Glass", true, Style.Glass, 0x1A1408, 0x3D2C0C, 0x2A200C, 0xFFD166, 0xF4A261, 0xFFF6E0),
         t("crimson-glass", "Crimson Glass", true, Style.Glass, 0x230509, 0x5A0F1C, 0x3A0A14, 0xFF5C74, 0xFFA06B, 0xFFEAEE),
         t("smoke-glass", "Smoke Glass", true, Style.Glass, 0x15171C, 0x2A2D36, 0x20232B, 0xE0E3EB, 0x9AA3B5, 0xF4F6FA),
@@ -120,12 +124,16 @@ object Themes {
         t("soft-light", "Soft Light", false, Style.Soft, 0xE6EAF0, 0xE6EAF0, 0xEEF1F6, 0x4C6FFF, 0xFF6B9A, 0x2A3140),
         t("soft-mint", "Soft Mint", false, Style.Soft, 0xDCEFE7, 0xDCEFE7, 0xE8F6F0, 0x0E9F78, 0x3B82F6, 0x143328),
         t("soft-night", "Soft Night", true, Style.Soft, 0x15171F, 0x15171F, 0x1D2029, 0xFFB86B, 0xFF6B9A, 0xF1F3F8),
+        t("soft-sand", "Soft Sand", false, Style.Soft, 0xEFE6D6, 0xEFE6D6, 0xF7F0E3, 0x9A6B2F, 0x2E8B6E, 0x33281A),
+        t("soft-slate", "Soft Slate", true, Style.Soft, 0x1A1F26, 0x1A1F26, 0x232A33, 0x7DD3FC, 0xA7F3D0, 0xE8EEF5),
         t("soft-rose", "Soft Rosé", false, Style.Soft, 0xF1E3E7, 0xF1E3E7, 0xF8ECEF, 0xD6336C, 0x7C4DFF, 0x3A1F29),
         // ---- Outline ----
         t("line-black", "Line Black", true, Style.Outline, 0x000000, 0x000000, 0x000000, 0x00E5FF, 0xFF4081, 0xFFFFFF),
         t("line-paper", "Line Paper", false, Style.Outline, 0xFFFFFF, 0xF2F2F2, 0xFFFFFF, 0x111111, 0xFF5722, 0x111111),
         t("line-neon", "Neon Line", true, Style.Outline, 0x07030F, 0x0E0620, 0x07030F, 0x39FF14, 0xFF00E5, 0xF4FFF0),
         t("line-gold", "Gold Line", true, Style.Outline, 0x0B0B0B, 0x141414, 0x0B0B0B, 0xE6C158, 0xFFFFFF, 0xF7F2E4),
+        t("line-emerald", "Emerald Line", true, Style.Outline, 0x03100B, 0x061A12, 0x03100B, 0x34D399, 0xE9D8A6, 0xE8FFF4),
+        t("line-red", "Red Line", true, Style.Outline, 0x0A0203, 0x140507, 0x0A0203, 0xFF3B52, 0xFFB3BD, 0xFFECEF),
         t("line-blue", "Blue Line", true, Style.Outline, 0x061327, 0x0A1E3D, 0x061327, 0x4DA3FF, 0x9AD1FF, 0xEAF3FF),
     )
 

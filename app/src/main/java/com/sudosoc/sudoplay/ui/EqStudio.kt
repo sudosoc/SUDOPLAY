@@ -101,6 +101,26 @@ fun EqStudio(vm: PlayerViewModel, onClose: () -> Unit) {
                     FxSlider("Squash loud parts", "${fx.compAmt}%", fx.compAmt.toFloat(), 0f..100f, { v -> vm.fxEdit(false) { it.copy(compAmt = v.toInt(), compOn = true, preset = "") } }) { vm.fxSave() }
                 }
 
+                FxCard("Parametric EQ", I.Tune, fx.pOn, { on -> vm.fxEdit { it.copy(pOn = on, preset = "") } }) {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Pill("Reset", false) { vm.fxEdit { it.copy(pf = FxState.DEFAULT_PF, pg = FxState.DEFAULT_PG, pq = FxState.DEFAULT_PQ, preset = "") } }
+                        Pill("Clear vocals", false) { vm.fxEdit { it.copy(pOn = true, pg = listOf(-20, -20, 30, 40, 0), pq = listOf(10, 10, 12, 12, 10), preset = "") } }
+                        Pill("Warm", false) { vm.fxEdit { it.copy(pOn = true, pg = listOf(30, 20, 0, -20, -40), pq = listOf(8, 8, 10, 10, 8), preset = "") } }
+                        Pill("Bright", false) { vm.fxEdit { it.copy(pOn = true, pg = listOf(-10, 0, 0, 30, 50), pq = listOf(10, 10, 10, 10, 8), preset = "") } }
+                        Pill("Cut mud", false) { vm.fxEdit { it.copy(pOn = true, pg = listOf(0, -40, 0, 10, 0), pf = listOf(60, 300, 1000, 4000, 12000), pq = listOf(10, 14, 10, 10, 10), preset = "") } }
+                        Pill("Quran / speech", false) { vm.fxEdit { it.copy(pOn = true, pg = listOf(-40, -10, 30, 30, -10), pf = listOf(80, 250, 1500, 3500, 10000), pq = listOf(10, 10, 10, 12, 10), preset = "") } }
+                    }
+                    for (i in 0 until 5) {
+                        val hz = fx.pf[i]
+                        FxSlider("Band ${i + 1} • " + if (hz >= 1000) "%.1f kHz".format(hz / 1000f) else "$hz Hz", "%+.1f dB".format(fx.pg[i] / 10f), fx.pg[i].toFloat(), -120f..120f,
+                            { v -> vm.fxEdit(false) { it.copy(pOn = true, pg = it.pg.toMutableList().also { l -> l[i] = (v / 5).toInt() * 5 }, preset = "") } }) { vm.fxSave() }
+                        FxSlider("   frequency", if (hz >= 1000) "%.2f kHz".format(hz / 1000f) else "$hz Hz", Math.log10(hz.toDouble()).toFloat(), 1.3f..4.3f,
+                            { v -> vm.fxEdit(false) { it.copy(pOn = true, pf = it.pf.toMutableList().also { l -> l[i] = Math.pow(10.0, v.toDouble()).toInt() }, preset = "") } }) { vm.fxSave() }
+                        FxSlider("   width (Q)", "%.1f".format(fx.pq[i] / 10f), fx.pq[i].toFloat(), 3f..80f,
+                            { v -> vm.fxEdit(false) { it.copy(pOn = true, pq = it.pq.toMutableList().also { l -> l[i] = v.toInt() }, preset = "") } }) { vm.fxSave() }
+                    }
+                }
+
                 FxCard("Balance & channels", I.Tune, null, {}) {
                     FxSlider("Balance", when { fx.balance < 0 -> "L ${-fx.balance}%"; fx.balance > 0 -> "R ${fx.balance}%"; else -> "Center" }, fx.balance.toFloat(), -100f..100f, { v -> vm.fxEdit(false) { it.copy(balance = v.toInt(), preset = "") } }) { vm.fxSave() }
                     SubToggle("Swap left / right", fx.swapCh) { on -> vm.fxEdit { it.copy(swapCh = on, preset = "") } }

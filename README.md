@@ -59,3 +59,10 @@ Android music player — Kotlin, Jetpack Compose, Media3 (ExoPlayer).
 - **Widgets**: small, large and square, six themes.
 - **Auto lyrics** (opt-in): LRCLIB lookup, with a Network log showing every request.
 - **Gifts**: lecture mode (resume position/speed on long audio), sound profile per headphones/speaker, resume when headphones connect, bookmarks, song info, duplicate finder, listening-hours chart, app shortcuts (Shuffle all / Resume / Car mode), clip maker, network log, night mode.
+
+## v0.7
+
+- **Icon styles**: 5 new families — Contour (outline-only), Heavy, Glass (translucent fill + line), Bubble, Ink (sharp, mitered) — 10 in total.
+- **Parametric EQ**: 5 peaking bands (frequency / gain / Q) in the built-in DSP, with presets (Clear vocals, Warm, Bright, Cut mud, Quran / speech).
+- **Themes**: Sakeenah, Madinah Dawn, Desert Night, Nile, Soft Sand, Soft Slate, Emerald Line, Red Line; 5 new player themes; seek styles Stairs, Zigzag, Tape.
+- **Search** ignores Arabic diacritics and alef/yaa/taa-marbuta variants; new sorts (Most played, Longest); friendlier empty state.

@@ -41,6 +41,12 @@ object FxBus {
     @Volatile var compOn = false
     @Volatile var compAmt = 0.5f
 
+    @Volatile var pOn = false
+    @Volatile var pf = IntArray(5) { FxState.DEFAULT_PF[it] }
+    @Volatile var pg = IntArray(5)
+    @Volatile var pq = IntArray(5) { 10 }
+    @Volatile var pVersion = 0
+
     /** Loudness-normalisation gain (linear) the processor glides towards, and the per-song gains found by the analyser (dB, by media id). */
     @Volatile var targetGain = 1f
     val gains = java.util.concurrent.ConcurrentHashMap<String, Float>()
@@ -53,6 +59,7 @@ object FxBus {
         widthOn = s.widthOn; width = s.width / 100f
         reverbOn = s.reverbOn; room = s.room / 100f; damp = s.damp / 100f; reverbMix = s.reverbMix / 100f
         echoOn = s.echoOn; echoMs = s.echoMs; echoFb = s.echoFb / 100f; echoMix = s.echoMix / 100f
+        pOn = s.pOn; pf = s.pf.toIntArray(); pg = s.pg.toIntArray(); pq = s.pq.toIntArray(); pVersion++
         balance = s.balance / 100f; swap = s.swapCh; compOn = s.compOn; compAmt = s.compAmt / 100f
     }
 }
@@ -74,6 +81,36 @@ class FxProcessor : BaseAudioProcessor() {
     private var combR = emptyArray<Comb>()
     private var apL = emptyArray<Allpass>()
     private var apR = emptyArray<Allpass>()
+
+    // parametric EQ: 5 peaking biquads (RBJ cookbook), direct form I, per channel
+    private val bq = Array(5) { FloatArray(5) }          // b0 b1 b2 a1 a2 (normalised)
+    private val bz = Array(2) { Array(5) { FloatArray(4) } }  // x1 x2 y1 y2
+    private var bqVersion = -1
+    private fun updateBiquads() {
+        val f = FxBus.pf; val g = FxBus.pg; val q = FxBus.pq
+        for (i in 0 until 5) {
+            val fc = f[i].toDouble().coerceIn(20.0, sr * 0.45)
+            val a = 10.0.pow(g[i] / 400.0)               // gain is dB x 10 → A = 10^(dB/40)
+            val w0 = 2 * PI * fc / sr
+            val alpha = sin(w0) / (2 * (q[i] / 10.0).coerceIn(0.2, 12.0))
+            val cw = cos(w0)
+            val a0 = 1 + alpha / a
+            bq[i][0] = ((1 + alpha * a) / a0).toFloat(); bq[i][1] = ((-2 * cw) / a0).toFloat(); bq[i][2] = ((1 - alpha * a) / a0).toFloat()
+            bq[i][3] = ((-2 * cw) / a0).toFloat(); bq[i][4] = ((1 - alpha / a) / a0).toFloat()
+        }
+        bqVersion = FxBus.pVersion
+    }
+    private fun biquad(c: Int, x0: Float): Float {
+        var x = x0
+        for (i in 0 until 5) {
+            if (FxBus.pg[i] == 0) continue
+            val k = bq[i]; val z = bz[c][i]
+            val y = k[0] * x + k[1] * z[0] + k[2] * z[1] - k[3] * z[2] - k[4] * z[3]
+            z[1] = z[0]; z[0] = x; z[3] = z[2]; z[2] = y
+            x = y
+        }
+        return x
+    }
 
     private var curGain = 1f
     private var env = 0f
@@ -140,6 +177,8 @@ class FxProcessor : BaseAudioProcessor() {
         val ratio = 2f + 8f * camt
         val makeup = 1f / (thr + (1f - thr) / ratio)
         val tgt = FxBus.targetGain
+        val pEq = on && FxBus.pOn
+        if (pEq && bqVersion != FxBus.pVersion) updateBiquads()
 
         var pos = inB.position()
         for (f in 0 until frames) {
@@ -150,6 +189,8 @@ class FxProcessor : BaseAudioProcessor() {
             // loudness normalisation glides to its target so a late analysis result never clicks
             curGain += (tgt - curGain) * 0.0008f
             l *= curGain; r *= curGain
+
+            if (pEq) { l = biquad(0, l); r = if (ch == 2) biquad(1, r) else l }
 
             if (swap) { val tmp = l; l = r; r = tmp }
             if (ch == 2) { l *= lGain; r *= rGain }

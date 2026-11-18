@@ -31,6 +31,10 @@ data class FxState(
     val swapCh: Boolean = false,
     val compOn: Boolean = false,           // "night mode" compressor
     val compAmt: Int = 50,                 // 0..100
+    val pOn: Boolean = false,              // parametric EQ (5 peaking bands, run in the DSP processor)
+    val pf: List<Int> = DEFAULT_PF,        // centre frequency, Hz
+    val pg: List<Int> = DEFAULT_PG,        // gain, dB x 10
+    val pq: List<Int> = DEFAULT_PQ,        // Q x 10
     val preset: String = "",
 ) {
     fun toJson(): String = JSONObject().apply {
@@ -40,10 +44,15 @@ data class FxState(
         put("rOn", reverbOn); put("room", room); put("damp", damp); put("rMix", reverbMix)
         put("eOn", echoOn); put("eMs", echoMs); put("eFb", echoFb); put("eMix", echoMix)
         put("bal", balance); put("swap", swapCh); put("cOn", compOn); put("cAmt", compAmt)
+        put("pOn", pOn); put("pf", JSONArray(pf)); put("pg", JSONArray(pg)); put("pq", JSONArray(pq))
         put("preset", preset)
     }.toString()
 
     companion object {
+        val DEFAULT_PF = listOf(60, 250, 1000, 4000, 12000)
+        val DEFAULT_PG = listOf(0, 0, 0, 0, 0)
+        val DEFAULT_PQ = listOf(10, 10, 10, 10, 10)
+        private fun ints(a: JSONArray?, def: List<Int>) = if (a != null && a.length() == def.size) List(def.size) { a.getInt(it) } else def
         fun fromJson(s: String?): FxState = runCatching {
             val o = JSONObject(s ?: return FxState())
             val lv = o.optJSONArray("lv")
@@ -55,6 +64,7 @@ data class FxState(
                 reverbOn = o.optBoolean("rOn"), room = o.optInt("room", 50), damp = o.optInt("damp", 40), reverbMix = o.optInt("rMix", 25),
                 echoOn = o.optBoolean("eOn"), echoMs = o.optInt("eMs", 320), echoFb = o.optInt("eFb", 35), echoMix = o.optInt("eMix", 30),
                 balance = o.optInt("bal"), swapCh = o.optBoolean("swap"), compOn = o.optBoolean("cOn"), compAmt = o.optInt("cAmt", 50),
+                pOn = o.optBoolean("pOn"), pf = ints(o.optJSONArray("pf"), DEFAULT_PF), pg = ints(o.optJSONArray("pg"), DEFAULT_PG), pq = ints(o.optJSONArray("pq"), DEFAULT_PQ),
                 preset = o.optString("preset", ""),
             )
         }.getOrDefault(FxState())

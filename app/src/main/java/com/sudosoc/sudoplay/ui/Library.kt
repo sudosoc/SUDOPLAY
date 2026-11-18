@@ -66,14 +66,17 @@ fun SongsTab(vm: PlayerViewModel) {
     var query by rememberSaveable { mutableStateOf("") }
     var sort by rememberSaveable { mutableIntStateOf(0) }
     var sortMenu by remember { mutableStateOf(false) }
-    val sortNames = listOf("Title", "Artist", "Recently added")
+    val sortNames = listOf("Title", "Artist", "Recently added", "Most played", "Longest")
     val list = remember(vm.songs, query, sort) {
-        val f = if (query.isBlank()) vm.songs else vm.songs.filter {
-            it.title.contains(query, true) || it.artist.contains(query, true) || it.album.contains(query, true)
+        val q = foldForSearch(query)
+        val f = if (q.isBlank()) vm.songs else vm.songs.filter {
+            foldForSearch(it.title).contains(q) || foldForSearch(it.artist).contains(q) || foldForSearch(it.album).contains(q)
         }
         when (sort) {
             1 -> f.sortedWith(compareBy({ it.artist.lowercase() }, { it.title.lowercase() }))
             2 -> f.sortedByDescending { it.dateAdded }
+            3 -> f.sortedByDescending { vm.plays[it.id] ?: 0 }
+            4 -> f.sortedByDescending { it.durationMs }
             else -> f.sortedBy { it.title.lowercase() }
         }
     }
@@ -92,7 +95,7 @@ fun SongsTab(vm: PlayerViewModel) {
             Text("${list.size}", color = t.text.copy(alpha = 0.6f))
         }
         if (vm.loading) Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = t.primary) }
-        else if (list.isEmpty()) EmptyState("No songs found")
+        else if (list.isEmpty()) EmptyState(if (query.isBlank()) "No songs found" else "Nothing matches “$query”", if (query.isBlank()) null else "Clear search") { query = "" }
         else LazyColumn(Modifier.fillMaxSize()) {
             itemsIndexed(list, key = { _, s -> s.id }) { i, s -> SongRow(s, vm, onClick = { vm.play(list, i) }) }
         }
@@ -119,11 +122,27 @@ fun SearchField(value: String, onChange: (String) -> Unit) {
 }
 
 @Composable
-fun EmptyState(text: String) {
+fun EmptyState(text: String, action: String? = null, onAction: () -> Unit = {}) {
     val t = LocalSudo.current
-    Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+    Column(Modifier.fillMaxWidth().padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(text, color = t.text.copy(alpha = 0.6f))
+        if (action != null) PillButton(action, I.Close, filled = true, onClick = onAction)
     }
+}
+
+/** Search-friendly form of a string: lower-case, no Arabic diacritics/tatweel, and alef/yaa/taa-marbuta variants unified. */
+fun foldForSearch(s: String): String {
+    val sb = StringBuilder(s.length)
+    for (ch in s.lowercase()) {
+        when {
+            ch in '\u064B'..'\u065F' || ch == '\u0670' || ch == '\u0640' -> {}
+            ch == '\u0623' || ch == '\u0625' || ch == '\u0622' || ch == '\u0671' -> sb.append('\u0627')
+            ch == '\u0649' -> sb.append('\u064A')
+            ch == '\u0629' -> sb.append('\u0647')
+            else -> sb.append(ch)
+        }
+    }
+    return sb.toString()
 }
 
 // ---------------- Albums ----------------
