@@ -169,6 +169,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun appContext() = ctx
     // ---- online (YouTube / SoundCloud / radio / links) ----
     init {
+        com.sudosoc.sudoplay.online.DownloadCenter.alreadySaved = { item, extra ->
+            val ids = listOfNotNull(extra, if (item.url.isNotBlank()) com.sudosoc.sudoplay.online.Online.idFor(item.url) else null)
+            ids.any { id -> olib.localFor(id)?.let { l -> byId.containsKey(l) } == true }
+        }
         com.sudosoc.sudoplay.online.Online.attach(ctx)
         store.onAdd = { sid -> rememberOnline(sid) }
         com.sudosoc.sudoplay.online.DownloadCenter.attach(ctx) { job ->
@@ -429,6 +433,46 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 android.widget.Toast.makeText(ctx, "Import failed: $msg", android.widget.Toast.LENGTH_LONG).show()
             } finally { importBusy = null }
         }
+    }
+
+    // ---- playlist preview (Discover): open a public playlist without adding anything ----
+    class PlaylistPreview(title: String, val thumb: String?, val url: String) {
+        var title by mutableStateOf(title)
+        var loading by mutableStateOf(true)
+        var error by mutableStateOf<String?>(null)
+        var tracks by mutableStateOf<List<com.sudosoc.sudoplay.online.ImpTrack>>(emptyList())
+        var added by mutableStateOf(false)
+    }
+    var preview by mutableStateOf<PlaylistPreview?>(null); private set
+    fun openPreview(title: String, thumb: String?, url: String) {
+        val st = PlaylistPreview(title, thumb, url); preview = st
+        viewModelScope.launch {
+            try {
+                val imp = withContext(Dispatchers.IO) { com.sudosoc.sudoplay.online.PlaylistImport.fromLink(url) }
+                st.tracks = imp.tracks; if (st.title.isBlank()) st.title = imp.name
+            }
+            catch (e: Throwable) { st.error = (e.message ?: e.javaClass.simpleName).take(160) }
+            finally { st.loading = false }
+        }
+    }
+    fun closePreview() { preview = null }
+    private fun entryOf(t: com.sudosoc.sudoplay.online.ImpTrack): com.sudosoc.sudoplay.data.OnlineEntry {
+        val key = if (t.url.isNotBlank()) t.url else "search:" + (t.artist + "|" + t.title).lowercase().replace(Regex("\\s+"), " ").trim()
+        return com.sudosoc.sudoplay.data.OnlineEntry(com.sudosoc.sudoplay.online.Online.idFor(key), t.kind?.name ?: "Link", t.title, t.artist, t.thumb, t.durationSec, t.url)
+    }
+    /** The previewed songs as playable entries (only now are they remembered by the app; no playlist is created). */
+    fun previewSongs(p: PlaylistPreview): List<Song> {
+        val es = p.tracks.map(::entryOf); olib.putAll(es)
+        return es.mapNotNull { entrySong(it.id) }.distinctBy { it.id }
+    }
+    /** "Add to my playlists": only when the user asks for it. */
+    fun previewAdd(p: PlaylistPreview) {
+        if (p.added) return
+        val es = p.tracks.map(::entryOf); olib.putAll(es)
+        val pl = store.create(p.title.ifBlank { "Playlist" })
+        store.addSongs(pl.id, es.map { it.id })
+        p.added = true
+        android.widget.Toast.makeText(ctx, "Added “${pl.name}” to your playlists", android.widget.Toast.LENGTH_SHORT).show()
     }
 
     /** Turns suggested songs (Discovery charts) into a playlist of "name only" entries. */

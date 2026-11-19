@@ -49,7 +49,7 @@ import androidx.compose.ui.graphics.luminance
 import com.sudosoc.sudoplay.PlayerViewModel
 import com.sudosoc.sudoplay.data.CoverStore
 
-const val APP_VERSION = "0.14.0"
+const val APP_VERSION = "0.14.1"
 
 @Composable
 fun SettingsTab(vm: PlayerViewModel) {

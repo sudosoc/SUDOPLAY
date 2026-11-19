@@ -109,14 +109,15 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                 val cur = if (tabs.any { it.index == tab }) tab else tabs.first().index
                 val pos = vm.settings.navPos.value
                 val nav: @Composable () -> Unit = {
-                    NavBar(tabs, cur, vertical = pos == "left" || pos == "right") { tab = it; detail = null; vm.haptics.tick() }
+                    NavBar(tabs, cur, vertical = pos == "left" || pos == "right") { tab = it; detail = null; vm.closePreview(); vm.haptics.tick() }
                 }
                 val body: @Composable ColumnScope.() -> Unit = {
                     Box(Modifier.weight(1f)) {
-                        val shown = if (!granted) -2 else if (detail != null) -1 else cur
+                        val shown = if (!granted) -2 else if (vm.preview != null) -3 else if (detail != null) -1 else cur
                         androidx.compose.animation.Crossfade(shown, animationSpec = androidx.compose.animation.core.tween(160), label = "tab") { key ->
                             when (key) {
                                 -2 -> PermissionGate(onRequest)
+                                -3 -> vm.preview?.let { PlaylistPreviewScreen(vm, it) }
                                 -1 -> detail?.let { d -> DetailScreen(vm, d) { detail = null } }
                                 0 -> SongsTab(vm)
                                 1 -> AlbumsTab(vm) { detail = it }
@@ -124,7 +125,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                                 3 -> PlaylistsTab(vm) { detail = it }
                                 5 -> OnlineTab(vm)
                                 6 -> DownloadsTab(vm)
-                                7 -> HomeTab(vm, onTab = { tab = it; detail = null })
+                                7 -> HomeTab(vm, onTab = { tab = it; detail = null; vm.closePreview() })
                                 else -> SettingsTab(vm)
                             }
                         }
@@ -142,6 +143,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                 }
                 // Later-registered BackHandlers win, so Now Playing is declared last.
                 BackHandler(enabled = detail != null) { detail = null }
+                BackHandler(enabled = vm.preview != null) { vm.closePreview() }
 
                 if (sheet.isOpen) {
                     Box(Modifier.fillMaxSize().graphicsLayer { alpha = sheet.frac * 0.55f }.background(Color.Black))

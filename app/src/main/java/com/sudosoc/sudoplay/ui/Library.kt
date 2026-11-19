@@ -228,6 +228,8 @@ fun PlaylistsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
     var creating by remember { mutableStateOf(false) }
     var importing by remember { mutableStateOf(false) }
     var importMsg by remember { mutableStateOf<String?>(null) }
+    var renaming by remember { mutableStateOf<com.sudosoc.sudoplay.data.Playlist?>(null) }
+    var deleting by remember { mutableStateOf<com.sudosoc.sudoplay.data.Playlist?>(null) }
     Column(Modifier.fillMaxSize()) {
         ScreenTitle("Playlists")
         Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -270,13 +272,25 @@ fun PlaylistsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
                     }
                     if (p.id != FAV_ID) Box {
                         IconButton({ menu = true }) { Icon(I.MoreVert, null, tint = t.text.copy(alpha = 0.7f)) }
-                        SudoMenu(menu, { menu = false }) { DropdownMenuItem(text = { Text("Delete") }, onClick = { vm.store.delete(p.id); menu = false }) }
+                        SudoMenu(menu, { menu = false }) {
+                            DropdownMenuItem(text = { Text("Rename") }, onClick = { renaming = p; menu = false })
+                            DropdownMenuItem(text = { Text("Delete") }, onClick = { deleting = p; menu = false })
+                        }
                     }
                 }
             }
         }
     }
     if (creating) NameDialog("New playlist", onDismiss = { creating = false }) { vm.store.create(it); creating = false }
+    renaming?.let { p -> NameDialog("Rename playlist", onDismiss = { renaming = null }, confirm = "Save", initial = p.name) { vm.store.rename(p.id, it); renaming = null } }
+    deleting?.let { p ->
+        AlertDialog(
+            onDismissRequest = { deleting = null }, title = { Text("Delete “${p.name}”?") },
+            text = { Text("The playlist is removed. Your songs stay on your phone.") },
+            confirmButton = { TextButton({ vm.store.delete(p.id); deleting = null }) { Text("Delete") } },
+            dismissButton = { TextButton({ deleting = null }) { Text("Cancel") } },
+        )
+    }
     if (importing) ImportPlaylistDialog(vm, onDismiss = { importing = false }) { importMsg = it }
 }
 
@@ -317,12 +331,12 @@ fun ImportPlaylistDialog(vm: PlayerViewModel, onDismiss: () -> Unit, onResult: (
 }
 
 @Composable
-fun NameDialog(title: String, onDismiss: () -> Unit, confirm: String = "Create", onOk: (String) -> Unit) {
-    var name by remember { mutableStateOf("") }
+fun NameDialog(title: String, onDismiss: () -> Unit, confirm: String = "Create", initial: String = "", onOk: (String) -> Unit) {
+    var name by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss, title = { Text(title) },
         text = { OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("Name") }) },
-        confirmButton = { TextButton({ onOk(name) }) { Text(confirm) } },
+        confirmButton = { TextButton({ onOk(name) }, enabled = name.isNotBlank()) { Text(confirm) } },
         dismissButton = { TextButton(onDismiss) { Text("Cancel") } },
     )
 }

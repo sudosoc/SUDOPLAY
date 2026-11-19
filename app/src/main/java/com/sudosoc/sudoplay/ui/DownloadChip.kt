@@ -52,6 +52,14 @@ fun DownloadChip(vm: PlayerViewModel, modifier: Modifier = Modifier) {
                 Modifier.size(34.dp).clip(RoundedCornerShape(50)).background(t.primary.copy(alpha = 0.18f)).border(1.dp, t.primary.copy(alpha = 0.5f), RoundedCornerShape(50)),
                 contentAlignment = Alignment.Center,
             ) { Icon(I.PhoneAndroid, "saved on this phone", tint = t.primary, modifier = Modifier.size(18.dp)) }
+            (job == null || !job.active) && DownloadCenter.pendingFor(song.id) -> Row(
+                Modifier.clip(shape).background(t.surface.copy(alpha = 0.85f)).border(1.dp, t.primary.copy(alpha = 0.6f), shape).padding(horizontal = 14.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(Modifier.size(18.dp), color = t.primary, strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+                Text("Finding the best source…", color = t.text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            }
             job != null && job.active -> Row(
                 Modifier.clip(shape).background(t.surface.copy(alpha = 0.85f)).border(1.dp, t.primary.copy(alpha = 0.6f), shape)
                     .clickable { DownloadCenter.cancel(job) }.padding(horizontal = 14.dp, vertical = 7.dp),

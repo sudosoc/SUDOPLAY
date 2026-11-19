@@ -140,3 +140,8 @@ New **Online** tab (can be hidden from Appearance → Navigation bar):
 ## v0.14.0 — Home dashboard
 - New **Home** tab (first tab; switch it off in Settings → Tabs): greeting, quick buttons, and sections of covers — Continue listening, Made for you, Most played, Favorites, Recently added, Downloaded, Haven't heard yet, Your numbers.
 - Tap the pencil to **reorder** sections (arrows) or **hide** them (eye); the choice is remembered.
+
+## v0.14.1 — open before you add, no double downloads
+- Playlists in Discover (and pasted playlist links) now **open as a list** — play, shuffle, play any song; nothing is saved until you tap "Add to my playlists". "Download all" is there too.
+- A download can't start twice: repeated taps, "Download all" over songs already downloading, or songs already on the phone are skipped with a message. The player chip shows "Finding the best source…" right away.
+- Playlists: rename, and a confirmation before deleting.

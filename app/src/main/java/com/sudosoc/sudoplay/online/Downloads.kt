@@ -61,6 +61,21 @@ object DownloadCenter {
     private const val UA = "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"
 
     fun attach(c: Context, saved: (DlJob) -> Unit) { ctx = c.applicationContext; onSaved = saved }
+
+    // ---------- never twice: a second tap while the first is still looking for a source (or already downloading) does nothing ----------
+    /** Keys of songs whose download is being prepared right now (before it becomes a job). Compose state, so the player chip can show it at once. */
+    val pending = androidx.compose.runtime.mutableStateListOf<String>()
+    /** Set by the app: is this song already saved on the phone? */
+    var alreadySaved: (OnlineItem, Long?) -> Boolean = { _, _ -> false }
+    private fun norm(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
+    fun keysOf(item: OnlineItem, extraId: Long? = null): Set<String> = buildSet {
+        if (item.url.isNotBlank()) add("id:" + Online.idFor(item.url))
+        extraId?.let { add("id:$it") }
+        add("n:" + norm(item.title + item.subtitle.substringBefore(" • ")))
+    }
+    private fun jobKeys(j: DlJob): Set<String> = j.origIds.map { "id:$it" }.toSet() + ("n:" + norm(j.title + j.artist))
+    fun isBusyWith(keys: Set<String>) = keys.any { it in pending } || jobs.any { it.active && jobKeys(it).any { k -> k in keys } }
+    fun pendingFor(songId: Long) = ("id:$songId") in pending
     val activeCount get() = jobs.count { it.active }
     fun avgProgress(): Float = jobs.filter { it.active }.let { l -> if (l.isEmpty()) 0f else l.map { it.progress }.average().toFloat() }
 
@@ -110,15 +125,30 @@ object DownloadCenter {
     fun downloadNow(items: List<OnlineItem>, playlistId: String? = null, extraIds: List<Long?> = emptyList()) {
         if (items.isEmpty()) return
         if (blockedByWifiOnly()) return
-        toast(if (items.size == 1) "Looking for the best source…" else "Starting ${items.size} downloads…")
+        // drop what is already downloading / saved, so repeated taps cannot start the same file again
+        val fresh = ArrayList<Triple<OnlineItem, Long?, Set<String>>>()
+        var busy = 0; var saved = 0
+        items.forEachIndexed { idx, it0 ->
+            val extra = extraIds.getOrNull(idx)
+            val keys = keysOf(it0, extra)
+            when {
+                alreadySaved(it0, extra) -> saved++
+                isBusyWith(keys) -> busy++
+                else -> { pending.addAll(keys); fresh.add(Triple(it0, extra, keys)) }
+            }
+        }
+        if (fresh.isEmpty()) { toast(if (busy > 0) "Already downloading — see Downloads" else "Already on your phone"); return }
+        toast(if (fresh.size == 1) "Looking for the best source…" else "Starting ${fresh.size} downloads…" + if (busy + saved > 0) " (${busy + saved} skipped: already there)" else "")
         scope.launch {
             var ok = 0
             val failed = ArrayList<String>()
-            for ((idx, it0) in items.withIndex()) {
-                val o = best(it0)
-                if (o == null) { failed.add(it0.title); continue }
-                withContext(Dispatchers.Main) { enqueue(it0.title, it0.subtitle.substringBefore(" • "), o, playlistId, it0, listOfNotNull(extraIds.getOrNull(idx))) }
-                ok++
+            for ((it0, extra, keys) in fresh) {
+                try {
+                    val o = best(it0)
+                    if (o == null) { failed.add(it0.title); continue }
+                    withContext(Dispatchers.Main) { enqueue(it0.title, it0.subtitle.substringBefore(" • "), o, playlistId, it0, listOfNotNull(extra)) }
+                    ok++
+                } finally { withContext(Dispatchers.Main) { keys.forEach { pending.remove(it) } } }
             }
             toast(when {
                 failed.isEmpty() -> if (ok == 1) "Downloading — see Downloads" else "Downloading $ok files — see Downloads"
@@ -143,6 +173,8 @@ object DownloadCenter {
     }
 
     fun enqueue(title: String, artist: String, option: DlOption, playlistId: String?, item: OnlineItem? = null, extraIds: List<Long> = emptyList()) {
+        // backup guard for the "choose quality" path: the same song is already running
+        if (jobs.any { it.active && norm(it.title + it.artist) == norm(title + artist) }) { toast("Already downloading “${title.take(40)}”"); return }
         val job = DlJob(next++, title, artist, option, playlistId)
         if (item != null) {
             job.thumb = item.thumb; job.durSec = item.durationSec

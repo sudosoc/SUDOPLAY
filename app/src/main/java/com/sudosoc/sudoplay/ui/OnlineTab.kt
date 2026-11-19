@@ -80,8 +80,7 @@ fun OnlineTab(vm: PlayerViewModel) {
             prefs.edit().putString("online_hist", history.joinToString("\n")).apply()
         }
         if (com.sudosoc.sudoplay.online.PlaylistImport.isPlaylistLink(q)) {
-            vm.onlineNote = "Importing that playlist — find it in Playlists"
-            vm.importPlaylist(q, "") { vm.onlineNote = it }
+            vm.openPreview("", null, q)   // opens it like a list; adding it to your playlists is a button inside
             return
         }
         if (Online.isLink(q)) {

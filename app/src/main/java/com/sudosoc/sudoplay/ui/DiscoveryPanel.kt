@@ -114,7 +114,7 @@ fun DiscoveryPanel(vm: PlayerViewModel) {
         }
 
         // ---- playlists
-        Text("Playlists to import", color = t.text, fontWeight = FontWeight.SemiBold)
+        Text("Playlists to explore", color = t.text, fontWeight = FontWeight.SemiBold)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OnlinePill("Charts", topic.isBlank()) { topic = "" }
             Discovery.playlistTopics.forEach { tp -> OnlinePill(tp, topic == tp) { topic = tp } }
@@ -122,9 +122,7 @@ fun DiscoveryPanel(vm: PlayerViewModel) {
         Shelf(pls, { reload++ }) { list ->
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 list.forEach { p ->
-                    Card(p.title, "${p.count} songs", p.thumb, badge = "IMPORT") {
-                        vm.importPlaylist("https://www.deezer.com/playlist/${p.id}", "") { note = it }
-                    }
+                    Card(p.title, "${p.count} songs", p.thumb) { vm.openPreview(p.title, p.thumb, "https://www.deezer.com/playlist/${p.id}") }
                 }
             }
         }
