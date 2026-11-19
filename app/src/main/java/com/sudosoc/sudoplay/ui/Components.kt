@@ -201,19 +201,14 @@ fun SongRow(song: Song, vm: PlayerViewModel, onClick: () -> Unit, badge: Boolean
     }
 }
 
-/** Tiny tag that says where a song plays from: the internet (not downloaded) or the phone itself. */
+/** Just an icon: a phone = the file is on this phone, a cloud = it plays from the internet. */
 @Composable
 fun SourceBadge(online: Boolean) {
     val t = LocalSudo.current
-    val c = if (online) t.secondary else t.primary
-    Row(
-        Modifier.clip(RoundedCornerShape(50)).background(c.copy(alpha = 0.16f)).padding(horizontal = 6.dp, vertical = 1.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(if (online) I.CloudQueue else I.PhoneAndroid, null, tint = c, modifier = Modifier.size(11.dp))
-        Spacer(Modifier.width(3.dp))
-        Text(if (online) "ONLINE" else "ON DEVICE", color = c, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-    }
+    Icon(
+        if (online) I.CloudQueue else I.PhoneAndroid, if (online) "online" else "on this phone",
+        tint = if (online) t.text.copy(alpha = 0.5f) else t.primary, modifier = Modifier.size(15.dp),
+    )
 }
 
 @Composable

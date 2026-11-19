@@ -130,7 +130,17 @@ object PlaylistImport {
         if (u.contains("deezer.", true)) return@withContext deezer(u)
         if (u.contains("audius.co", true)) return@withContext audius(u)
         if (u.contains("spotify.", true)) throw java.io.IOException("Open the playlist in Spotify and share its open.spotify.com link")
-        if (u.contains("youtube.com", true) || u.contains("youtu.be", true) || u.contains("soundcloud.com", true)) {
+        if (u.contains("youtube.com", true) || u.contains("youtu.be", true)) {
+            val id = YtPlaylist.idOf(u) ?: throw java.io.IOException("That YouTube link has no playlist in it (it needs list=…)")
+            // YouTube's page is read directly; the extractor library is the fallback
+            val direct = runCatching { YtPlaylist.fetch(id) }
+            direct.getOrNull()?.takeIf { it.second.isNotEmpty() }?.let { return@withContext ImpList(it.first, it.second) }
+            val viaLib = runCatching { Online.playlistTracks("https://www.youtube.com/playlist?list=$id") }.getOrNull()
+            if (viaLib != null && viaLib.second.isNotEmpty())
+                return@withContext ImpList(viaLib.first, viaLib.second.map { ImpTrack(it.title, it.subtitle, it.durationSec, it.thumb, it.url, it.kind) })
+            throw java.io.IOException(direct.exceptionOrNull()?.message ?: "No songs found in that playlist (it may be private or a YouTube mix)")
+        }
+        if (u.contains("soundcloud.com", true)) {
             val (name, items) = Online.playlistTracks(u)
             if (items.isEmpty()) throw java.io.IOException("No songs found in that playlist (is it private?)")
             return@withContext ImpList(name, items.map { ImpTrack(it.title, it.subtitle, it.durationSec, it.thumb, it.url, it.kind) })

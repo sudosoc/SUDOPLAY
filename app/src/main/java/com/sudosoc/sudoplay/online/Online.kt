@@ -272,7 +272,8 @@ object Online {
                     // some YouTube responses only carry a small muxed (video+audio) file; the player ignores its video track
                     ?: info.videoStreams.filter { it.isUrl && !it.isVideoOnly && !it.content.isNullOrBlank() }.minByOrNull { it.height }?.content
                     ?: throw java.io.IOException("No playable stream found (the source may be blocking this network)")
-                song(id, info.name ?: item.title, info.uploaderName ?: item.subtitle, best, info.thumbnails.firstOrNull()?.url ?: item.thumb, info.duration * 1000)
+                val thumb = info.thumbnails.maxByOrNull { it.height }?.url ?: info.thumbnails.lastOrNull()?.url ?: item.thumb
+                song(id, info.name ?: item.title, (info.uploaderName ?: item.subtitle).removeSuffix(" - Topic"), best, thumb, info.duration * 1000)
             }
         }
     }
@@ -287,8 +288,13 @@ object Online {
         init()
         val svc = runCatching { NewPipe.getServiceByUrl(u) }.getOrNull()
         when (svc?.serviceId) {
-            ServiceList.YouTube.serviceId -> OnlineItem(OnlineKind.YouTube, "YouTube", "", null, 0, u)
-            ServiceList.SoundCloud.serviceId -> OnlineItem(OnlineKind.SoundCloud, "SoundCloud", "", null, 0, u)
+            // read the real title / artist / cover right away, so a pasted link is named properly everywhere (queue, downloads, playlists)
+            ServiceList.YouTube.serviceId, ServiceList.SoundCloud.serviceId -> {
+                val kind = if (svc.serviceId == ServiceList.YouTube.serviceId) OnlineKind.YouTube else OnlineKind.SoundCloud
+                runCatching { StreamInfo.getInfo(u) }.map {
+                    OnlineItem(kind, it.name ?: kind.label, (it.uploaderName ?: "").removeSuffix(" - Topic"), it.thumbnails.maxByOrNull { t -> t.height }?.url ?: it.thumbnails.lastOrNull()?.url, it.duration, u)
+                }.getOrElse { OnlineItem(kind, kind.label, "", null, 0, u) }
+            }
             else -> OnlineItem(OnlineKind.Link, Uri.parse(u).lastPathSegment?.takeIf { it.isNotBlank() } ?: (Uri.parse(u).host ?: "Stream"), Uri.parse(u).host ?: "", null, 0, u)
         }
     }

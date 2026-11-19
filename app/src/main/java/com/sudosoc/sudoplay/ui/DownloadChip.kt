@@ -48,14 +48,10 @@ fun DownloadChip(vm: PlayerViewModel, modifier: Modifier = Modifier) {
 
     Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         when {
-            saved != null -> Row(
-                Modifier.clip(shape).background(t.primary.copy(alpha = 0.18f)).border(1.dp, t.primary.copy(alpha = 0.5f), shape).padding(horizontal = 14.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(I.CheckCircle, null, tint = t.primary, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(7.dp))
-                Text("On your phone", color = t.primary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-            }
+            saved != null -> Box(
+                Modifier.size(34.dp).clip(RoundedCornerShape(50)).background(t.primary.copy(alpha = 0.18f)).border(1.dp, t.primary.copy(alpha = 0.5f), RoundedCornerShape(50)),
+                contentAlignment = Alignment.Center,
+            ) { Icon(I.PhoneAndroid, "saved on this phone", tint = t.primary, modifier = Modifier.size(18.dp)) }
             job != null && job.active -> Row(
                 Modifier.clip(shape).background(t.surface.copy(alpha = 0.85f)).border(1.dp, t.primary.copy(alpha = 0.6f), shape)
                     .clickable { DownloadCenter.cancel(job) }.padding(horizontal = 14.dp, vertical = 7.dp),

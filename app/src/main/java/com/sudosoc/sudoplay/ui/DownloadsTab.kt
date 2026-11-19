@@ -28,6 +28,7 @@ fun DownloadsTab(vm: PlayerViewModel) {
     var picked by remember { mutableStateOf(setOf<Long>()) }
     var confirmDelete by remember { mutableStateOf<List<Song>?>(null) }
     var toPlaylist by remember { mutableStateOf<List<Song>?>(null) }
+    var editing by remember { mutableStateOf<Song?>(null) }
     LaunchedEffect(list) { picked = picked.filter { id -> list.any { it.id == id } }.toSet() }
     val totalMin = list.sumOf { it.durationMs } / 60_000
 
@@ -53,11 +54,11 @@ fun DownloadsTab(vm: PlayerViewModel) {
         if (selecting) Text("${picked.size} selected", color = t.primary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 18.dp))
 
         LazyColumn(Modifier.weight(1f)) {
-            val jobs = DownloadCenter.jobs.toList()
+            val jobs = DownloadCenter.jobs.filter { it.state != "Done" }
             if (jobs.isNotEmpty()) {
                 item("jobs_head") {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("In progress", color = t.text, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text(if (jobs.any { it.active }) "In progress" else "Finished", color = t.text, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                         if (jobs.any { !it.active }) TextButton({ DownloadCenter.clearFinished() }) { Text("Clear finished") }
                     }
                 }
@@ -82,9 +83,6 @@ fun DownloadsTab(vm: PlayerViewModel) {
             if (list.isEmpty() && jobs.isEmpty()) item("empty") {
                 EmptyState("Nothing downloaded yet. Tap Download on any online song, or open an imported playlist and download it all.")
             }
-            if (list.isNotEmpty()) item("songs_head") {
-                Text("On your phone", color = t.text, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp))
-            }
             items(list, key = { "dl_" + it.id }) { s ->
                 if (selecting) {
                     Row(
@@ -99,7 +97,8 @@ fun DownloadsTab(vm: PlayerViewModel) {
                             Text(s.artist, color = t.text.copy(alpha = 0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
                         }
                     }
-                } else SongRow(s, vm, onClick = { vm.play(list, list.indexOf(s)) }, badge = true) { dismiss ->
+                } else SongRow(s, vm, onClick = { vm.play(list, list.indexOf(s)) }) { dismiss ->
+                    DropdownMenuItem(text = { Text("Fix name, cover & lyrics…") }, onClick = { editing = s; dismiss() })
                     DropdownMenuItem(text = { Text("Delete from phone") }, onClick = { confirmDelete = listOf(s); dismiss() })
                 }
             }
@@ -121,6 +120,27 @@ fun DownloadsTab(vm: PlayerViewModel) {
                 }) { Text("Delete") }
             },
             dismissButton = { TextButton({ confirmDelete = null }) { Text("Cancel") } },
+        )
+    }
+    editing?.let { song ->
+        var title by remember(song.id) { mutableStateOf(song.title) }
+        var artist by remember(song.id) { mutableStateOf(song.artist.takeUnless { it.equals("<unknown>", true) }.orEmpty()) }
+        AlertDialog(
+            onDismissRequest = { editing = null }, title = { Text("Fix details") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(title, { title = it }, singleLine = true, label = { Text("Title") })
+                    OutlinedTextField(artist, { artist = it }, singleLine = true, label = { Text("Artist") })
+                    Text("Saves the name, then looks up the cover and lyrics by it.", style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton({
+                    val s0 = song; editing = null
+                    vm.fixDownload(s0, title.trim().ifBlank { s0.title }, artist.trim()) { android.widget.Toast.makeText(ctx, it, android.widget.Toast.LENGTH_LONG).show() }
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton({ editing = null }) { Text("Cancel") } },
         )
     }
     toPlaylist?.let { sel -> MultiPlaylistPicker(vm, sel) { toPlaylist = null; selecting = false; picked = emptySet() } }

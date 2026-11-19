@@ -275,7 +275,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             for (s in todo) {
                 val e = olib.get(s.id)
                 val item = withContext(Dispatchers.IO) {
-                    runCatching { if (e != null) itemFor(e) else onlineOrigin[s.id] ?: com.sudosoc.sudoplay.online.OnlineItem(com.sudosoc.sudoplay.online.OnlineKind.Link, s.title, s.artist, s.artUrl, s.durationMs / 1000, s.uri.toString()) }.getOrNull()
+                    runCatching { if (e != null) itemFor(e) else itemOf(s) }.getOrNull()
                 }
                 if (item != null) { items += item; ids += s.id }
             }
@@ -288,9 +288,20 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun downloadCurrent() {
         val s = current ?: return
         if (!s.online) return
-        val item = onlineOrigin[s.id] ?: com.sudosoc.sudoplay.online.OnlineItem(com.sudosoc.sudoplay.online.OnlineKind.Link, s.title, s.artist, s.artUrl, s.durationMs / 1000, s.uri.toString())
         if (com.sudosoc.sudoplay.online.DownloadCenter.blockedByWifiOnly()) return
-        com.sudosoc.sudoplay.online.DownloadCenter.downloadNow(listOf(item), null, listOf(s.id, stubOf[s.id]))
+        com.sudosoc.sudoplay.online.DownloadCenter.downloadNow(listOf(itemOf(s)), null, listOf(s.id, stubOf[s.id]))
+    }
+    /**
+     * What to download for a song that is playing: the real title, artist, cover and length the player already knows
+     * (the item it was found as can be a bare pasted link with no details), with the page link from where it came.
+     */
+    private fun itemOf(s: Song): com.sudosoc.sudoplay.online.OnlineItem {
+        val o = onlineOrigin[s.id]
+        val artist = s.artist.takeIf { it.isNotBlank() && it != "Stream" && it != "Radio" && it != "Online" } ?: o?.subtitle.orEmpty()
+        return com.sudosoc.sudoplay.online.OnlineItem(
+            o?.kind ?: com.sudosoc.sudoplay.online.OnlineKind.Link, s.title.ifBlank { o?.title.orEmpty() }, artist,
+            s.artUrl ?: o?.thumb, if (s.durationMs > 0) s.durationMs / 1000 else o?.durationSec ?: 0, o?.url ?: s.uri.toString(),
+        )
     }
     /** Local copy of the playing online song, if it has been downloaded. */
     fun localCopyOf(s: Song?): Song? {
@@ -317,8 +328,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             runCatching {
-                val artist = lyricArtist(job.artist)
-                val tmp = Song(id, lyricTitle(job.title, artist), artist, "", 0, job.durSec * 1000, android.net.Uri.EMPTY, 0, 0)
+                var artist = lyricArtist(job.artist)
+                var title = job.title
+                if (artist.isBlank()) Regex("""\s[-–—]\s""").find(title)?.let { m -> artist = title.substring(0, m.range.first).trim(); title = title.substring(m.range.last + 1) }
+                val tmp = Song(id, lyricTitle(title, artist), artist, "", 0, job.durSec * 1000, android.net.Uri.EMPTY, 0, 0)
                 LyricsFetcher.fetch(ctx, tmp)
             }
         }
@@ -328,6 +341,40 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun downloadedSongs(): List<Song> {
         val mapped = olib.localIds()
         return rawSongs.filter { it.folder.contains("SUDOPLAY", true) || it.id in mapped }.sortedByDescending { it.dateAdded }
+    }
+
+    /**
+     * Fixes a downloaded file that has a wrong or empty name: writes the new title/artist into the file's library entry,
+     * then looks up its cover (Deezer) and lyrics (lrclib) by that name.
+     */
+    fun fixDownload(song: Song, title: String, artist: String, done: (String) -> Unit) {
+        viewModelScope.launch {
+            val msg = withContext(Dispatchers.IO) {
+                val ok = runCatching {
+                    ctx.contentResolver.update(song.uri, android.content.ContentValues().apply {
+                        put(MediaStore.Audio.Media.TITLE, title)
+                        put(MediaStore.Audio.Media.ARTIST, artist)
+                    }, null, null) > 0
+                }.getOrDefault(false)
+                if (!ok) return@withContext "Android did not allow renaming this file"
+                var cover = false; var lyr = false
+                runCatching {
+                    val q = android.net.Uri.encode("$artist $title".trim())
+                    val j = org.json.JSONObject(com.sudosoc.sudoplay.online.Online.getJson("https://api.deezer.com/search?q=$q&limit=1"))
+                    val url = j.optJSONArray("data")?.optJSONObject(0)?.optJSONObject("album")?.let { it.optString("cover_big").ifBlank { it.optString("cover_medium") } }
+                    if (!url.isNullOrBlank()) com.sudosoc.sudoplay.online.Online.fetchBytes(url)?.let { b ->
+                        android.graphics.BitmapFactory.decodeByteArray(b, 0, b.size)?.let { CoverStore.saveForId(ctx, song.id, it); cover = true }
+                    }
+                }
+                runCatching {
+                    val tmp = Song(song.id, lyricTitle(title, artist), artist, "", 0, song.durationMs, song.uri, 0, 0)
+                    lyr = LyricsFetcher.fetch(ctx, tmp, force = true) != null
+                }
+                "Saved" + (if (cover) " • cover found" else "") + (if (lyr) " • lyrics found" else "")
+            }
+            refreshLibrary()
+            done(msg)
+        }
     }
 
     /** Deletes the files (only ones this app made can be removed without a system prompt); reports how many went. */
@@ -375,8 +422,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 val p = store.create(nameHint.ifBlank { imp.name })
                 store.addSongs(p.id, entries.map { it.id })
                 done("Imported ${entries.size} songs into “${p.name}”")
+                android.widget.Toast.makeText(ctx, "Imported ${entries.size} songs — see Playlists", android.widget.Toast.LENGTH_LONG).show()
             } catch (e: Throwable) {
-                done((e.message ?: e.javaClass.simpleName).take(160))
+                val msg = (e.message ?: e.javaClass.simpleName).take(160)
+                done(msg)
+                android.widget.Toast.makeText(ctx, "Import failed: $msg", android.widget.Toast.LENGTH_LONG).show()
             } finally { importBusy = null }
         }
     }

@@ -167,11 +167,15 @@ private fun NavBar(tabs: List<Tab>, selected: Int, vertical: Boolean, onSelect: 
         val on = tb.index == selected
         val pill by androidx.compose.animation.animateColorAsState(if (on) t.primary.copy(alpha = 0.18f) else Color.Transparent, androidx.compose.animation.core.tween(220), label = "pill")
         Column(
-            Modifier.clip(RoundedCornerShape(16.dp)).background(pill).clickable { onSelect(tb.index) }.padding(horizontal = 12.dp, vertical = 5.dp),
+            Modifier.clip(RoundedCornerShape(16.dp)).background(pill).clickable { onSelect(tb.index) }.padding(horizontal = if (tabs.size >= 6) 6.dp else 12.dp, vertical = 5.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Icon(tb.icon, null, tint = if (on) t.primary else t.text.copy(alpha = 0.6f))
-            Text(tb.label, color = if (on) t.primary else t.text.copy(alpha = 0.6f), fontSize = 11.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+            // many tabs → smaller labels that never wrap onto a second line
+            Text(
+                tb.label, color = if (on) t.primary else t.text.copy(alpha = 0.6f), fontSize = if (tabs.size >= 6) 9.sp else 11.sp,
+                fontWeight = if (on) FontWeight.Bold else FontWeight.Normal, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Clip,
+            )
         }
     }
     if (vertical) {

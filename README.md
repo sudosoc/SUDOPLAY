@@ -123,3 +123,10 @@ New **Online** tab (can be hidden from Appearance → Navigation bar):
 - **20 logos** (Settings → Appearance → App logo & icon). The chosen logo is the launcher icon (one launcher entry per logo, switched at runtime), and shows in Settings and About. Default: the SUDOPLAY mark; "Classic" is the old icon.
 - **About** page: what the app does, privacy, under the hood, source link; and at the bottom **About the developer** — a card with photo, the SUDOSOC wordmark, name, and GitHub / portfolio / email links.
 - Settings home regrouped (Look & feel, Listening, Your stuff, About); "Online & privacy" is now "Online & downloads"; backup page is just backup & restore.
+
+## v0.13.1 — proper names for pasted links, working YouTube playlists, simpler icons
+- A pasted YouTube / SoundCloud link now gets its real title, artist, cover and lyrics when downloaded (no more "YouTube (1)").
+- Public YouTube playlists import again (read straight from the playlist page, with a NewPipe fallback). Import result shows as a toast.
+- "On your phone" / "ONLINE" text replaced by a small icon: phone = on this phone, cloud = online.
+- Downloads tab: finished jobs no longer clutter "In progress"; "Fix name, cover & lyrics…" on any downloaded song.
+- Bottom bar labels never wrap.
