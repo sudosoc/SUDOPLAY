@@ -131,6 +131,9 @@ class AppSettings(prefs: SharedPreferences) {
     /** Discovery "For you": sends the names of your most-played artists to Deezer to find related music. */
     val discoverPersonal = BoolSetting(prefs, "disc_personal", false)
 
+    /** 0 = original icon, 1..20 = the logo pack (also the launcher icon) */
+    val appLogo = IntSetting(prefs, "app_logo", 1)
+
     // Fonts & colors
     /** font family key (see Fonts.kt); "default" = the system font */
     val fontFamily = StringSetting(prefs, "ui_font", "default")

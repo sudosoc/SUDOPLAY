@@ -49,7 +49,7 @@ import androidx.compose.ui.graphics.luminance
 import com.sudosoc.sudoplay.PlayerViewModel
 import com.sudosoc.sudoplay.data.CoverStore
 
-const val APP_VERSION = "0.12.0"
+const val APP_VERSION = "0.13.0"
 
 @Composable
 fun SettingsTab(vm: PlayerViewModel) {
@@ -57,7 +57,7 @@ fun SettingsTab(vm: PlayerViewModel) {
 
     BackHandler(enabled = page != "home") {
         page = when (page) {
-            "app_themes", "player_themes", "seek_styles", "icon_styles", "player_buttons", "nav_bar", "fonts" -> "appearance"
+            "app_themes", "player_themes", "seek_styles", "icon_styles", "player_buttons", "nav_bar", "fonts", "logos" -> "appearance"
             "arrange" -> "player_buttons"
             "stats", "dupes" -> "extras"
             "gesture_editor" -> "props"
@@ -79,6 +79,8 @@ fun SettingsTab(vm: PlayerViewModel) {
         "gesture_editor" -> GestureEditorPage(vm) { page = "props" }
         "nav_bar" -> NavBarPage(vm) { page = "appearance" }
         "fonts" -> FontsPage(vm) { page = "appearance" }
+        "logos" -> LogosPage(vm) { page = "appearance" }
+        "about" -> AboutPage(vm) { page = "home" }
         "stats" -> StatsPage(vm) { page = "extras" }
         "dupes" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) { SubHeader("Duplicate finder", { page = "extras" }); DuplicatesBody(vm) }
         "extras" -> ExtrasPage(vm, onOpen = { page = it }) { page = "home" }
@@ -177,9 +179,7 @@ private fun HomePage(vm: PlayerViewModel, onOpen: (String) -> Unit) {
     val st = vm.settings
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Row(Modifier.padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(t.primary, t.secondary))), contentAlignment = Alignment.Center) {
-                Icon(I.LibraryMusic, null, tint = t.onAccent)
-            }
+            LogoImage(st.appLogo.value, 48.dp)
             Spacer(Modifier.width(12.dp))
             Column {
                 Text("SUDOPLAY", color = t.text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, letterSpacing = androidx.compose.ui.unit.TextUnit(2f, androidx.compose.ui.unit.TextUnitType.Sp))
@@ -194,8 +194,10 @@ private fun HomePage(vm: PlayerViewModel, onOpen: (String) -> Unit) {
         BigSection(I.Explore, "Car & launch", "السيارة", "Car mode, autoplay on open, keep screen on") { onOpen("car") }
         SectionLabel("Your stuff")
         BigSection(I.LibraryMusic, "Library & files", "المكتبة", "Hidden folders, short tracks, lyrics, covers, duplicates, listening stats") { onOpen("extras") }
-        BigSection(I.Search, "Online & privacy", "الأونلاين", "Search suggestions, network log, what leaves your phone") { onOpen("online") }
-        BigSection(I.Collections, "Backup & about", "النسخ الاحتياطي", "Back up and restore everything in one file") { onOpen("backup") }
+        BigSection(I.Search, "Online & downloads", "الأونلاين", "Downloads, Discovery, search suggestions, network log, what leaves your phone") { onOpen("online") }
+        BigSection(I.Collections, "Backup & restore", "النسخ الاحتياطي", "Back up and restore everything in one file") { onOpen("backup") }
+        SectionLabel("About")
+        BigSection(I.PlayCircle, "About SUDOPLAY", "عن التطبيق", "What it does, how it treats your data, and who made it") { onOpen("about") }
         Text("SUDOPLAY $APP_VERSION • by SUDOSOC", color = t.text.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(20.dp))
     }
@@ -230,6 +232,7 @@ private fun AppearancePage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack
         SectionLabel("Themes")
         NavRow(I.Apps, "App themes", "${Themes.byId(s.theme.value).name} • ${Themes.all.size} themes, ${Themes.all.count { it.live != null }} of them live") { onOpen("app_themes") }
         NavRow(I.PlayCircle, "Player themes", "${PlayerThemes.byId(s.playerTheme.value).name} • ${PlayerThemes.all.size} looks, live previews") { onOpen("player_themes") }
+        NavRow(I.PlayCircle, "App logo & icon", "${Logos.names[s.appLogo.value.coerceIn(0, Logos.count)]} • ${Logos.count} logos • also changes the launcher icon") { onOpen("logos") }
         SectionLabel("Text")
         NavRow(I.TextFields, "Fonts & colors", "${Fonts.byKey(s.fontFamily.value).label} • ${Fonts.all.size} fonts • text, accent color and size") { onOpen("fonts") }
         SectionLabel("Live backgrounds")
@@ -736,7 +739,7 @@ private fun OnlineSettingsPage(vm: PlayerViewModel, onOpen: (String) -> Unit, on
     var suggest by remember { mutableStateOf(prefs.getBoolean("online_suggest", false)) }
     var hist by remember { mutableStateOf((prefs.getString("online_hist", "") ?: "").split("\n").count { it.isNotBlank() }) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        SubHeader("Online & privacy", onBack)
+        SubHeader("Online & downloads", onBack)
         SectionLabel("Sources")
         HintLine("Which sources a search uses is chosen in the Online tab (Sources button). Everything works without accounts or API keys.")
         SwitchRow("Show the Online tab", "YouTube, SoundCloud, Audius, Quran, archive.org, radio and links", s.navOnline.value) { s.navOnline.set(it) }
@@ -781,7 +784,7 @@ private fun BackupPage(vm: PlayerViewModel, onBack: () -> Unit) {
         }
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        SubHeader("Backup & about", onBack)
+        SubHeader("Backup & restore", onBack)
         SectionLabel("Backup")
         HintLine("One file with your settings, EQ scenes, playlists and play counts. Restoring restarts the app.")
         RowCard(onClick = { saver.launch("sudoplay-backup.json") }) {
@@ -794,8 +797,6 @@ private fun BackupPage(vm: PlayerViewModel, onBack: () -> Unit) {
             Spacer(Modifier.width(12.dp))
             TitleSub("Restore", "Pick a backup file; the app restarts", Modifier.weight(1f))
         }
-        SectionLabel("About")
-        RowCard { TitleSub("SUDOPLAY ${APP_VERSION}", "A private music player by SUDOSOC • ceo@sudosoc.com", Modifier.weight(1f)) }
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -1048,6 +1049,214 @@ private fun ColorPicker(current: String, hexText: String, onHexText: (String) ->
                 hexText, { onHexText(it); Fonts.parse(it)?.let { _ -> onPick(it.trim().let { h -> if (h.startsWith("#")) h else "#$h" }) } },
                 singleLine = true, label = { Text("Custom color (#RRGGBB)") }, modifier = Modifier.fillMaxWidth(),
             )
+        }
+    }
+}
+
+// ---------------------------------------------------------------- logos
+@Composable
+private fun LogosPage(vm: PlayerViewModel, onBack: () -> Unit) {
+    val s = vm.settings
+    val t = LocalSudo.current
+    val ctx = LocalContext.current
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        SubHeader("App logo & icon", onBack)
+        HintLine("Pick the logo you like. It is used in Settings and About, and it becomes the app icon on your home screen / app drawer. Some launchers need a few seconds to show the new icon.")
+        RowCard {
+            LogoImage(s.appLogo.value, 72.dp)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Wordmark("SUDO", "PLAY", 26.sp)
+                Text(Logos.names[s.appLogo.value.coerceIn(0, Logos.count)], color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        SectionLabel("Choose")
+        val all = (1..Logos.count).toList() + 0
+        all.chunked(4).forEach { row ->
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { n ->
+                    val on = s.appLogo.value == n
+                    Column(
+                        Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
+                            .border(if (on) 2.dp else 1.dp, if (on) t.primary else t.text.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
+                            .clickable {
+                                s.appLogo.set(n); Logos.applyLauncher(ctx, n); vm.haptics.click()
+                                Toast.makeText(ctx, "Icon changed — the launcher may take a moment to update", Toast.LENGTH_SHORT).show()
+                            }.padding(6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        LogoImage(n, 64.dp)
+                        Text(Logos.names[n], color = if (on) t.primary else t.text.copy(alpha = 0.7f), fontSize = 10.sp, maxLines = 1, modifier = Modifier.padding(top = 3.dp))
+                    }
+                }
+                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+        HintLine("If your launcher shows a blank or old icon, long-press the app → remove the shortcut, then drag SUDOPLAY out of the app drawer again.")
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+// ---------------------------------------------------------------- about
+private data class FeatureGroup(val icon: ImageVector, val title: String, val lines: List<String>)
+
+@Composable
+private fun AboutPage(vm: PlayerViewModel, onBack: () -> Unit) {
+    val s = vm.settings
+    val t = LocalSudo.current
+    val ctx = LocalContext.current
+    var dev by remember { mutableStateOf(false) }
+    val groups = listOf(
+        FeatureGroup(I.MusicNote, "Your music", listOf(
+            "Songs, albums, artists and folders, with fast search that understands Arabic",
+            "Playlists, favorites and smart lists: recently played, most played, newly added, unplayed and a daily mix",
+            "Queue, play next, A-B loop, bookmarks, sleep timer with fade-out and lecture mode that remembers position and speed",
+            "Synced lyrics (file, tags or optional lrclib) and a real waveform seek bar",
+        )),
+        FeatureGroup(I.Equalizer, "Sound studio", listOf(
+            "10-band parametric equalizer with live response graph and spectrum, ${com.sudosoc.sudoplay.data.ParamPresets.all.size} presets and saved scenes",
+            "Bass, virtualizer, reverb, loudness, limiter, ReplayGain, crossfade, skip silence, pitch and speed",
+        )),
+        FeatureGroup(I.Palette, "Looks", listOf(
+            "${Themes.all.size} app themes (${Themes.all.count { it.live != null }} animated) and ${PlayerThemes.all.size} player themes with live backgrounds that follow the bass",
+            "${Logos.count} logos that also change the launcher icon, ${Fonts.all.size} fonts, 24 text and accent colors, ${IconStyle.entries.size} icon families, seek bar shapes and a movable navigation bar",
+            "Cover colors: the whole app can take its palette from the album art",
+        )),
+        FeatureGroup(I.Explore, "Online — no account, no API key", listOf(
+            "One search over YouTube, SoundCloud, Audius, archive.org, radio and a full Quran library (every sheikh and surah)",
+            "Discovery: trending by genre, playlists to import in one tap, Audius trending and optional suggestions from what you play",
+            "Import playlists from YouTube, SoundCloud, Spotify, Deezer, Audius, pasted lists, .m3u and .csv files",
+            "Download any song for offline use with its cover and lyrics. Playlists show ONLINE or ON DEVICE on every song",
+        )),
+        FeatureGroup(I.Extension, "Everything else", listOf(
+            "Gestures you can remap, haptics, 3 home-screen widgets, video clip maker, car mode for head units",
+            "Duplicate finder, listening stats, hidden folders, one-file backup and restore",
+        )),
+    )
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        SubHeader("About", onBack)
+        // header
+        Column(Modifier.fillMaxWidth().padding(vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            LogoImage(s.appLogo.value, 96.dp)
+            Spacer(Modifier.height(12.dp))
+            Wordmark("SUDO", "PLAY", 34.sp)
+            Text("Music Player by SUDOSOC", color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodyMedium)
+            Text("v$APP_VERSION", color = t.primary, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp))
+        }
+        HintLine("A private, offline-first music player for Android that also knows the internet — built for one person first, then shared with friends. No ads, no account, no tracking.")
+
+        SectionLabel("What it can do")
+        groups.forEach { g ->
+            RowCard {
+                Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(Brush.linearGradient(listOf(t.primary, t.secondary))), contentAlignment = Alignment.Center) {
+                    Icon(g.icon, null, tint = t.onAccent)
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(g.title, color = t.text, fontWeight = FontWeight.Bold)
+                    g.lines.forEach { Text("•  $it", color = t.text.copy(alpha = 0.68f), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 3.dp)) }
+                }
+            }
+        }
+
+        SectionLabel("Your privacy")
+        RowCard {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Nothing leaves your phone unless you use an online feature, and every request is written to the Network log (Settings → Online & downloads) so you can see exactly what was sent. " +
+                        "Lyrics, search suggestions, “For you” and cover/lyrics for downloads are optional and explained next to their switches.",
+                    color = t.text.copy(alpha = 0.68f), style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+
+        SectionLabel("Under the hood")
+        RowCard {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Kotlin • Jetpack Compose • Media3 • OkHttp • NewPipeExtractor. Online data from Deezer's public charts, Audius, archive.org, lrclib.net, a public radio directory and a bundled Quran index. " +
+                        "Fonts are open-source (SIL OFL): Cairo, Tajawal, Almarai, Noto Kufi, Changa, Reem Kufi, El Messiri, Lemonada, Marhey, Amiri, Rubik, Poppins, Space Grotesk, JetBrains Mono.",
+                    color = t.text.copy(alpha = 0.68f), style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+        RowCard(onClick = { openUrl(ctx, "https://github.com/sudosoc/SUDOPLAY") }) {
+            Icon(I.Extension, null, tint = t.primary)
+            Spacer(Modifier.width(12.dp))
+            TitleSub("Source code", "github.com/sudosoc/SUDOPLAY", Modifier.weight(1f))
+        }
+
+        // about the developer — last thing on the page
+        SectionLabel("The developer")
+        RowCard(onClick = { dev = true }) {
+            androidx.compose.foundation.Image(
+                androidx.compose.ui.res.painterResource(com.sudosoc.sudoplay.R.drawable.dev_photo), null,
+                Modifier.size(46.dp).clip(CircleShape), contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            )
+            Spacer(Modifier.width(12.dp))
+            TitleSub("About the developer", "SUDOSOC • tap to meet him", Modifier.weight(1f))
+            Icon(I.ChevronRight, null, tint = t.text.copy(alpha = 0.5f))
+        }
+        Spacer(Modifier.height(28.dp))
+    }
+    if (dev) DevCard { dev = false }
+}
+
+private fun openUrl(ctx: android.content.Context, url: String) {
+    runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+}
+
+/** The developer card: photo, the SUDOSOC wordmark, name in small gray, and three links. */
+@Composable
+private fun DevCard(onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val shape = RoundedCornerShape(28.dp)
+    val ink = Color(0xFFEDEFF7)
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.fillMaxWidth().clip(shape)
+                .background(Brush.verticalGradient(listOf(Color(0xFF14142B), Color(0xFF07070F))))
+                .border(1.dp, Brush.linearGradient(listOf(Color(0xFF38BDF8).copy(alpha = 0.7f), Color(0xFFB44CFF).copy(alpha = 0.7f))), shape)
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                Modifier.size(132.dp).clip(CircleShape).border(3.dp, Logos.brand, CircleShape).padding(5.dp).clip(CircleShape),
+            ) {
+                androidx.compose.foundation.Image(
+                    androidx.compose.ui.res.painterResource(com.sudosoc.sudoplay.R.drawable.dev_photo), null,
+                    Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            Wordmark("SUDO", "SOC", 34.sp, ink)
+            Text("Seif Alsayed Ali", color = Color(0xFF8A8FA3), fontSize = 14.sp, modifier = Modifier.padding(top = 2.dp))
+            Spacer(Modifier.height(18.dp))
+            DevLink(androidx.compose.material.icons.Icons.Rounded.Code, "GitHub", "github.com/sudosoc") { openUrl(ctx, "https://github.com/sudosoc") }
+            DevLink(androidx.compose.material.icons.Icons.Rounded.Language, "Portfolio", "seif.sudosoc.com") { openUrl(ctx, "https://seif.sudosoc.com") }
+            DevLink(androidx.compose.material.icons.Icons.Rounded.Email, "Email", "ceo@sudosoc.com") {
+                runCatching { ctx.startActivity(Intent(Intent.ACTION_SENDTO, android.net.Uri.parse("mailto:ceo@sudosoc.com")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            }
+            TextButton(onDismiss, Modifier.padding(top = 6.dp)) { Text("Close", color = Color(0xFF8A8FA3)) }
+        }
+    }
+}
+
+@Composable
+private fun DevLink(icon: ImageVector, title: String, value: String, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(shape).background(Color.White.copy(alpha = 0.06f))
+            .border(1.dp, Color.White.copy(alpha = 0.08f), shape).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(Logos.brand), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = Color.White, modifier = Modifier.size(19.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(title, color = Color(0xFF8A8FA3), fontSize = 11.sp)
+            Text(value, color = Color(0xFFEDEFF7), fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
     }
 }

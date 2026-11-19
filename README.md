@@ -118,3 +118,8 @@ New **Online** tab (can be hidden from Appearance → Navigation bar):
 - **Discovery** on the Online tab: trending songs by genre, playlists to import with one tap (charts, Arabic, Egypt, lofi, workout…), Audius trending, and an opt-in "For you" built from your most-played artists (sends only artist names to Deezer).
 - **Fonts & colors** (Settings → Appearance): 19 fonts built in (Cairo, Tajawal, Almarai, Noto Kufi, Changa, Reem Kufi, El Messiri, Lemonada, Marhey, Amiri, Rubik, Poppins, Space Grotesk, JetBrains Mono + system families), text size, 24 text colors and 24 accent colors + custom `#RRGGBB`, with a low-contrast warning.
 - Backups now include online songs of your playlists.
+
+## v0.13 — logo pack, About, developer card
+- **20 logos** (Settings → Appearance → App logo & icon). The chosen logo is the launcher icon (one launcher entry per logo, switched at runtime), and shows in Settings and About. Default: the SUDOPLAY mark; "Classic" is the old icon.
+- **About** page: what the app does, privacy, under the hood, source link; and at the bottom **About the developer** — a card with photo, the SUDOSOC wordmark, name, and GitHub / portfolio / email links.
+- Settings home regrouped (Look & feel, Listening, Your stuff, About); "Online & privacy" is now "Online & downloads"; backup page is just backup & restore.
