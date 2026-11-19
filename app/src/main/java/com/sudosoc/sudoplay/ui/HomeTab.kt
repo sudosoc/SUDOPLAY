@@ -1,6 +1,7 @@
 package com.sudosoc.sudoplay.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -66,7 +67,7 @@ fun HomeTab(vm: PlayerViewModel, onTab: (Int) -> Unit) {
         item("head") {
             Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp, top = 14.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(greeting, color = t.text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    Text(greeting.let { g -> Tr.t(g) + st.userName.value.trim().takeIf { it.isNotEmpty() }?.let { n -> if (Tr.ar) "، $n" else ", $n" }.orEmpty() }, color = t.text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                     Text("${vm.songs.size} songs on your phone", color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
                 }
                 IconButton({ editing = !editing }) { Icon(if (editing) I.Check else I.Edit, if (editing) "done" else "edit home", tint = if (editing) t.primary else t.text.copy(alpha = 0.75f)) }
@@ -74,7 +75,8 @@ fun HomeTab(vm: PlayerViewModel, onTab: (Int) -> Unit) {
         }
         item("quick") {
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { PillButton("Shuffle all", I.Shuffle, filled = true) { vm.shufflePlay(vm.songs) } }
+                vm.smart(Smart.Recent).firstOrNull()?.let { last -> item { PillButton("Resume", I.PlayArrow, filled = true) { vm.play(listOf(last), 0) } } }
+                item { PillButton("Shuffle all", I.Shuffle, filled = vm.smart(Smart.Recent).isEmpty()) { vm.shufflePlay(vm.songs) } }
                 item { PillButton("Discover", I.Explore) { onTab(5) } }
                 item { PillButton("Playlists", I.LibraryMusic) { onTab(3) } }
                 item { PillButton("Downloads", I.Download) { onTab(6) } }
@@ -111,7 +113,7 @@ fun HomeTab(vm: PlayerViewModel, onTab: (Int) -> Unit) {
                 }
                 item("r_$id") {
                     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        itemsIndexed(list, key = { _, s -> id + s.id }) { idx, s -> HomeCard(s, vm.current?.id == s.id) { vm.play(list, idx) } }
+                        itemsIndexed(list, key = { _, s -> id + s.id }) { idx, s -> HomeCard(s, vm, vm.current?.id == s.id) { vm.play(list, idx) } }
                     }
                 }
             }
@@ -120,14 +122,23 @@ fun HomeTab(vm: PlayerViewModel, onTab: (Int) -> Unit) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun HomeCard(song: Song, current: Boolean, onClick: () -> Unit) {
+private fun HomeCard(song: Song, vm: PlayerViewModel, current: Boolean, onClick: () -> Unit) {
     val t = LocalSudo.current
-    Column(Modifier.width(128.dp).clickable(onClick = onClick)) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var menu by remember { mutableStateOf(false) }
+    Column(Modifier.width(128.dp).combinedClickable(onClick = onClick, onLongClick = { vm.haptics.click(); menu = true })) {
         Artwork(song, Modifier.size(128.dp), 256, 16.dp)
         Spacer(Modifier.height(6.dp))
         Text(song.title, color = if (current) t.primary else t.text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(artistLabel(song.artist), color = t.text.copy(alpha = 0.6f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        SudoMenu(menu, { menu = false }) {
+            DropdownMenuItem(text = { Text("Play next") }, onClick = { vm.playNext(song); menu = false; android.widget.Toast.makeText(ctx, Tr.t("Plays next"), android.widget.Toast.LENGTH_SHORT).show() })
+            DropdownMenuItem(text = { Text("Add to queue") }, onClick = { vm.addToQueue(song); menu = false; android.widget.Toast.makeText(ctx, Tr.t("Added to queue"), android.widget.Toast.LENGTH_SHORT).show() })
+            DropdownMenuItem(text = { Text(if (vm.store.isFav(song.id)) "Remove from favorites" else "Add to favorites") }, onClick = { vm.store.toggleFav(song.id); menu = false })
+            DropdownMenuItem(text = { Text("Add to playlist…") }, onClick = { vm.playlistTarget = song; menu = false })
+        }
     }
 }
 

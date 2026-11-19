@@ -64,8 +64,8 @@ fun PlaylistPreviewScreen(vm: PlayerViewModel, p: PlayerViewModel.PlaylistPrevie
                             Box {
                                 IconButton({ menu = true }) { Icon(I.MoreVert, null, tint = t.text.copy(alpha = 0.7f)) }
                                 SudoMenu(menu, { menu = false }) {
-                                    DropdownMenuItem(text = { Text("Play next") }, onClick = { menu = false; vm.previewSongs(p).getOrNull(i)?.let { s -> vm.playNext(s); android.widget.Toast.makeText(ctx, "Plays next", android.widget.Toast.LENGTH_SHORT).show() } })
-                                    DropdownMenuItem(text = { Text("Add to queue") }, onClick = { menu = false; vm.previewSongs(p).getOrNull(i)?.let { s -> vm.addToQueue(s); android.widget.Toast.makeText(ctx, "Added to queue", android.widget.Toast.LENGTH_SHORT).show() } })
+                                    DropdownMenuItem(text = { Text("Play next") }, onClick = { menu = false; vm.previewSongs(p).getOrNull(i)?.let { s -> vm.playNext(s); android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Plays next"), android.widget.Toast.LENGTH_SHORT).show() } })
+                                    DropdownMenuItem(text = { Text("Add to queue") }, onClick = { menu = false; vm.previewSongs(p).getOrNull(i)?.let { s -> vm.addToQueue(s); android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Added to queue"), android.widget.Toast.LENGTH_SHORT).show() } })
                                     DropdownMenuItem(text = { Text("Download") }, onClick = { menu = false; vm.previewSongs(p).getOrNull(i)?.let { s -> vm.downloadSongs(listOf(s)) } })
                                 }
                             }

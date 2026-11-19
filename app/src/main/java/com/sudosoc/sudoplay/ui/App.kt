@@ -10,7 +10,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -78,14 +77,19 @@ class SheetState(private val scope: CoroutineScope) {
 @Composable
 fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
     val iconStyle = runCatching { IconStyle.valueOf(vm.settings.iconStyle.value) }.getOrDefault(IconStyle.Rounded)
-    CompositionLocalProvider(LocalIconStyle provides iconStyle) {
+    Tr.ar = Tr.isArabic(vm.settings.language.value)
+    CompositionLocalProvider(
+        LocalIconStyle provides iconStyle,
+        androidx.compose.ui.platform.LocalLayoutDirection provides if (Tr.ar) androidx.compose.ui.unit.LayoutDirection.Rtl else androidx.compose.ui.unit.LayoutDirection.Ltr,
+    ) {
     val coverArt by rememberArt(vm.current, 64)
     SudoPlayTheme(
         vm.themeId, cover = if (vm.settings.coverColors.value) coverArt else null, liveMode = vm.settings.liveMode.value,
         fontKey = vm.settings.fontFamily.value, fontScalePct = vm.settings.fontScale.value,
         textHex = vm.settings.textColor.value, accentHex = vm.settings.accentColor.value,
     ) {
-        var tab by rememberSaveable { mutableIntStateOf(if (vm.settings.navHome.value) 7 else 0) }
+        var tab by rememberSaveable { mutableIntStateOf(vm.settings.lastTab.value.takeIf { it >= 0 } ?: if (vm.settings.navHome.value) 7 else 0) }
+        LaunchedEffect(tab) { vm.settings.lastTab.set(tab) }
         var detail by remember { mutableStateOf<Detail?>(null) }
         LaunchedEffect(vm.wantTab) { vm.wantTab?.let { w -> if (w == 5) vm.settings.navOnline.set(true); if (w == 6) vm.settings.navDownloads.set(true); tab = w; detail = null; vm.wantTab = null } }
         val scope = rememberCoroutineScope()
@@ -112,6 +116,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                     NavBar(tabs, cur, vertical = pos == "left" || pos == "right") { tab = it; detail = null; vm.closePreview(); vm.haptics.tick() }
                 }
                 val body: @Composable ColumnScope.() -> Unit = {
+                    if (!com.sudosoc.sudoplay.data.NetState.online) OfflineBanner()
                     Box(Modifier.weight(1f)) {
                         val shown = if (!granted) -2 else if (vm.preview != null) -3 else if (detail != null) -1 else cur
                         androidx.compose.animation.Crossfade(shown, animationSpec = androidx.compose.animation.core.tween(160), label = "tab") { key ->
@@ -148,12 +153,17 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                 if (sheet.isOpen) {
                     Box(Modifier.fillMaxSize().graphicsLayer { alpha = sheet.frac * 0.55f }.background(Color.Black))
                     Box(Modifier.fillMaxSize().graphicsLayer { translationY = (1f - sheet.frac) * size.height }) {
-                        NowPlayingScreen(vm, sheet)
+                        CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) { NowPlayingScreen(vm, sheet) }
                     }
                 }
                 BackHandler(enabled = sheet.isOpen) { sheet.close() }
-                if (vm.carMode) CarScreen(vm) { vm.carMode = false }
-                if (vm.openStudio) EqStudio(vm) { vm.openStudio = false }
+                CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) {
+                    if (vm.carMode) CarScreen(vm) { vm.carMode = false }
+                    if (vm.openStudio) EqStudio(vm) { vm.openStudio = false }
+                }
+                // first launch → welcome; after an update → what's new
+                if (!vm.settings.onboarded.value) Onboarding(vm) { vm.settings.onboarded.set(true); vm.settings.lastSeenVersion.set(APP_VERSION) }
+                else if (vm.settings.lastSeenVersion.value != APP_VERSION) WhatsNew(APP_VERSION) { vm.settings.lastSeenVersion.set(APP_VERSION) }
                 vm.dlRequest?.let { (items, name) -> DownloadDialog(vm, items, name) { vm.dlRequest = null } }
                 vm.infoSong?.let { SongInfoDialog(vm, it) { vm.infoSong = null } }
                 vm.clipSong?.let { ClipScreen(vm, it) { vm.clipSong = null } }
@@ -174,7 +184,7 @@ private fun NavBar(tabs: List<Tab>, selected: Int, vertical: Boolean, onSelect: 
             Modifier.clip(RoundedCornerShape(16.dp)).background(pill).clickable { onSelect(tb.index) }.padding(horizontal = if (tabs.size >= 8) 3.dp else if (tabs.size >= 6) 6.dp else 12.dp, vertical = 5.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Icon(tb.icon, null, tint = if (on) t.primary else t.text.copy(alpha = 0.6f))
+            Icon(tb.icon, tb.label, tint = if (on) t.primary else t.text.copy(alpha = 0.6f))
             // many tabs → smaller labels that never wrap onto a second line
             Text(
                 tb.label, color = if (on) t.primary else t.text.copy(alpha = 0.6f), fontSize = if (tabs.size >= 8) 8.sp else if (tabs.size >= 6) 9.sp else 11.sp,

@@ -271,7 +271,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     /** Download an online song (or every online song of a list): finds the source by name when needed. */
     fun downloadSongs(list: List<Song>) {
         val todo = list.filter { it.online && olib.localFor(it.id) == null }
-        if (todo.isEmpty()) { android.widget.Toast.makeText(ctx, "Already on your phone", android.widget.Toast.LENGTH_SHORT).show(); return }
+        if (todo.isEmpty()) { android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Already on your phone"), android.widget.Toast.LENGTH_SHORT).show(); return }
         if (com.sudosoc.sudoplay.online.DownloadCenter.blockedByWifiOnly()) return
         android.widget.Toast.makeText(ctx, if (todo.size == 1) "Looking for the best source…" else "Preparing ${todo.size} songs…", android.widget.Toast.LENGTH_SHORT).show()
         viewModelScope.launch {
@@ -283,7 +283,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 if (item != null) { items += item; ids += s.id }
             }
-            if (items.isEmpty()) android.widget.Toast.makeText(ctx, "Couldn't find a source for these songs", android.widget.Toast.LENGTH_LONG).show()
+            if (items.isEmpty()) android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Couldn't find a source for these songs"), android.widget.Toast.LENGTH_LONG).show()
             else com.sudosoc.sudoplay.online.DownloadCenter.downloadNow(items, null, ids)
         }
     }
@@ -426,11 +426,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 val p = store.create(nameHint.ifBlank { imp.name })
                 store.addSongs(p.id, entries.map { it.id })
                 done("Imported ${entries.size} songs into “${p.name}”")
-                android.widget.Toast.makeText(ctx, "Imported ${entries.size} songs — see Playlists", android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Imported ${entries.size} songs — see Playlists"), android.widget.Toast.LENGTH_LONG).show()
             } catch (e: Throwable) {
-                val msg = (e.message ?: e.javaClass.simpleName).take(160)
+                val msg = com.sudosoc.sudoplay.online.Friendly.of(e)
                 done(msg)
-                android.widget.Toast.makeText(ctx, "Import failed: $msg", android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Import failed: $msg"), android.widget.Toast.LENGTH_LONG).show()
             } finally { importBusy = null }
         }
     }
@@ -451,7 +451,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 val imp = withContext(Dispatchers.IO) { com.sudosoc.sudoplay.online.PlaylistImport.fromLink(url) }
                 st.tracks = imp.tracks; if (st.title.isBlank()) st.title = imp.name
             }
-            catch (e: Throwable) { st.error = (e.message ?: e.javaClass.simpleName).take(160) }
+            catch (e: Throwable) { st.error = com.sudosoc.sudoplay.online.Friendly.of(e) }
             finally { st.loading = false }
         }
     }
@@ -472,7 +472,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val pl = store.create(p.title.ifBlank { "Playlist" })
         store.addSongs(pl.id, es.map { it.id })
         p.added = true
-        android.widget.Toast.makeText(ctx, "Added “${pl.name}” to your playlists", android.widget.Toast.LENGTH_SHORT).show()
+        android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Added “${pl.name}” to your playlists"), android.widget.Toast.LENGTH_SHORT).show()
     }
 
     /** Turns suggested songs (Discovery charts) into a playlist of "name only" entries. */
@@ -535,7 +535,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 else if (mode == 1) c.addMediaItem(c.currentMediaItemIndex + 1, toItem(s))
                 else c.addMediaItem(toItem(s))
             } catch (e: Throwable) {
-                onlineError = (e.message ?: e.javaClass.simpleName).take(160)
+                onlineError = com.sudosoc.sudoplay.online.Friendly.of(e)
             } finally { onlineBusy = null }
         }
     }
@@ -550,7 +550,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 onlineBusy = null
                 playOnline(if (thumb != null && item.thumb == null) com.sudosoc.sudoplay.online.OnlineItem(item.kind, item.title, item.subtitle, thumb, item.durationSec, item.url) else item)
             } catch (e: Throwable) {
-                onlineError = (e.message ?: e.javaClass.simpleName).take(160)
+                onlineError = com.sudosoc.sudoplay.online.Friendly.of(e)
             } finally { if (onlineBusy?.startsWith("name:") == true) onlineBusy = null }
         }
     }

@@ -202,8 +202,8 @@ fun ClipScreen(vm: PlayerViewModel, song: Song, onClose: () -> Unit) {
                                 ClipPainter(spec, art).draw(Canvas(bmp), 1080, 1920, tSec / len, liveLevels(tSec), line, age.coerceAtLeast(1f))
                                 ClipRenderer.saveImage(ctx, bmp, "SUDOPLAY_${System.currentTimeMillis() / 1000}.png")
                                 bmp.recycle()
-                            }.onSuccess { withContext(Dispatchers.Main) { Toast.makeText(ctx, "Saved to Pictures/SUDOPLAY", Toast.LENGTH_SHORT).show() } }
-                                .onFailure { withContext(Dispatchers.Main) { Toast.makeText(ctx, "Could not save the image", Toast.LENGTH_SHORT).show() } }
+                            }.onSuccess { withContext(Dispatchers.Main) { Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Saved to Pictures/SUDOPLAY"), Toast.LENGTH_SHORT).show() } }
+                                .onFailure { withContext(Dispatchers.Main) { Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Could not save the image"), Toast.LENGTH_SHORT).show() } }
                         }
                     }
                 }

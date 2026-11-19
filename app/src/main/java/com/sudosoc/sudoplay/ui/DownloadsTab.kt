@@ -37,12 +37,13 @@ fun DownloadsTab(vm: PlayerViewModel) {
     var editing by remember { mutableStateOf<Song?>(null) }
     LaunchedEffect(list) { picked = picked.filter { id -> list.any { it.id == id } }.toSet() }
     val totalMin = list.sumOf { it.durationMs } / 60_000
+    val mb = remember(list) { list.sumOf { s -> runCatching { java.io.File(s.path).length() }.getOrDefault(0L) } / 1_048_576 }
 
     Column(Modifier.fillMaxSize()) {
         ScreenTitle("Downloads")
         Text(
             if (list.isEmpty()) "Songs you download are saved on your phone and work offline"
-            else "${list.size} songs • ${if (totalMin >= 60) "${totalMin / 60} h ${totalMin % 60} min" else "$totalMin min"} • works offline",
+            else "${list.size} songs • ${if (totalMin >= 60) "${totalMin / 60} h ${totalMin % 60} min" else "$totalMin min"} • works offline" + if (mb > 0) " • ${if (mb >= 1024) "%.1f GB".format(mb / 1024.0) else "$mb MB"}" else "",
             color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 18.dp),
         )
         if (all.size > 8) SearchField(query) { query = it }
@@ -66,6 +67,7 @@ fun DownloadsTab(vm: PlayerViewModel) {
                 item("jobs_head") {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(if (jobs.any { it.active }) "In progress" else "Finished", color = t.text, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        if (jobs.count { it.active } >= 2) TextButton({ jobs.filter { it.active }.forEach { DownloadCenter.cancel(it) } }) { Text("Cancel all") }
                         if (jobs.any { it.state == "Failed" }) TextButton({
                             jobs.filter { it.state == "Failed" }.forEach { j -> DownloadCenter.jobs.remove(j); DownloadCenter.enqueue(j.title, j.artist, j.option, j.playlistId, null, j.origIds) }
                         }) { Text("Retry failed") }

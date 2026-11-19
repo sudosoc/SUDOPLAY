@@ -42,7 +42,7 @@ class WidgetActionReceiver : BroadcastReceiver() {
             val c = runCatching { future.get() }.getOrNull()
             if (c == null) { pending.finish(); return@addListener }
             if (c.mediaItemCount == 0) {
-                Toast.makeText(ctx, "Open SUDOPLAY and pick a song first", Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Open SUDOPLAY and pick a song first"), Toast.LENGTH_SHORT).show()
             } else when (intent.action) {
                 ACTION_PLAY -> if (c.isPlaying) c.pause() else { if (c.playbackState == Player.STATE_IDLE) c.prepare(); c.play() }
                 ACTION_NEXT -> c.seekToNext()

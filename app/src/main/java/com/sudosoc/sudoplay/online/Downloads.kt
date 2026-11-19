@@ -159,7 +159,7 @@ object DownloadCenter {
     }
 
     private fun toast(msg: String) {
-        android.os.Handler(android.os.Looper.getMainLooper()).post { android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show() }
+        android.os.Handler(android.os.Looper.getMainLooper()).post { android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t(msg), android.widget.Toast.LENGTH_LONG).show() }
     }
 
     /** "Download only on Wi-Fi" (Settings → Online). True = refused, and the user was told. */
@@ -194,7 +194,7 @@ object DownloadCenter {
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     job.state = "Cancelled"
                 } catch (e: Throwable) {
-                    job.state = "Failed"; job.error = (e.message ?: e.javaClass.simpleName).take(140)
+                    job.state = "Failed"; job.error = com.sudosoc.sudoplay.online.Friendly.of(e)
                 }
             }
         }

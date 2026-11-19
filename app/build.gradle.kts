@@ -12,8 +12,8 @@ android {
         applicationId = "com.sudosoc.sudoplay"
         minSdk = 26
         targetSdk = 35
-        versionCode = 18
-        versionName = "0.14.1"
+        versionCode = 19
+        versionName = "0.15.0"
     }
 
     buildTypes {
@@ -46,7 +46,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:1.5.1")
     implementation("androidx.media3:media3-session:1.5.1")
     implementation("com.google.guava:guava:33.3.1-android")
-    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.0")
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     testImplementation("junit:junit:4.13.2")

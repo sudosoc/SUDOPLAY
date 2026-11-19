@@ -64,7 +64,7 @@ fun PillButton(label: String, icon: androidx.compose.ui.graphics.vector.ImageVec
 fun SongsTab(vm: PlayerViewModel) {
     val t = LocalSudo.current
     var query by rememberSaveable { mutableStateOf("") }
-    var sort by rememberSaveable { mutableIntStateOf(0) }
+    val sort = vm.settings.songSort.value
     var sortMenu by remember { mutableStateOf(false) }
     val sortNames = listOf("Title", "Artist", "Recently added", "Most played", "Longest")
     val list = remember(vm.songs, query, sort) {
@@ -88,14 +88,17 @@ fun SongsTab(vm: PlayerViewModel) {
             Box {
                 PillButton(sortNames[sort], I.SwapVert) { sortMenu = true }
                 SudoMenu(sortMenu, { sortMenu = false }) {
-                    sortNames.forEachIndexed { i, n -> DropdownMenuItem(text = { Text(n) }, onClick = { sort = i; sortMenu = false }) }
+                    sortNames.forEachIndexed { i, n -> DropdownMenuItem(text = { Text(n) }, onClick = { vm.settings.songSort.set(i); sortMenu = false }) }
                 }
             }
             Spacer(Modifier.weight(1f))
             Text("${list.size}", color = t.text.copy(alpha = 0.6f))
         }
         if (vm.loading) Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = t.primary) }
-        else if (list.isEmpty()) EmptyState(if (query.isBlank()) "No songs found" else "Nothing matches “$query”", if (query.isBlank()) null else "Clear search") { query = "" }
+        else if (list.isEmpty()) {
+            if (query.isBlank()) EmptyState("Nothing found on this phone yet. Add some music, then rescan.", "Rescan library") { vm.refreshLibrary() }
+            else EmptyState("Nothing matches “$query”", "Clear search") { query = "" }
+        }
         else LazyColumn(Modifier.fillMaxSize()) {
             itemsIndexed(list, key = { _, s -> s.id }) { i, s -> SongRow(s, vm, onClick = { vm.play(list, i) }) }
         }

@@ -41,6 +41,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.sudosoc.sudoplay.data.CrashLog.install(this)
+        com.sudosoc.sudoplay.data.NetState.start(this)
         enableEdgeToEdge()
         handleIntent(intent)
         setContent {

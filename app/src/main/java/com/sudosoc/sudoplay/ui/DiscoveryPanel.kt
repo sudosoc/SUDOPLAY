@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.background
@@ -33,7 +32,7 @@ private sealed interface Load<out T> {
 private fun <T> loadState(key: Any?, reload: Int, f: suspend () -> T): State<Load<T>> =
     produceState<Load<T>>(Load.Busy, key, reload) {
         value = Load.Busy
-        value = try { Load.Ok(f()) } catch (e: Throwable) { Load.Err((e.message ?: e.javaClass.simpleName).take(80)) }
+        value = try { Load.Ok(f()) } catch (e: Throwable) { Load.Err(com.sudosoc.sudoplay.online.Friendly.of(e)) }
     }
 
 private fun artStub(url: String?) = Song(

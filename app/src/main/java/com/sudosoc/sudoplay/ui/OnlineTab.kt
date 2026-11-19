@@ -100,7 +100,7 @@ fun OnlineTab(vm: PlayerViewModel) {
         kinds.forEach { results[it] = SourceState(loading = true) }
         searchJobs = kinds.map { k ->
             scope.launch {
-                results[k] = try { SourceState(Online.search(k, q)) } catch (e: Throwable) { SourceState(error = (e.message ?: e.javaClass.simpleName).take(120)) }
+                results[k] = try { SourceState(Online.search(k, q)) } catch (e: Throwable) { SourceState(error = com.sudosoc.sudoplay.online.Friendly.of(e)) }
             }
         }
     }
@@ -239,7 +239,7 @@ private fun CollectionScreen(vm: PlayerViewModel, item: OnlineItem, onBack: () -
     var reload by remember { mutableIntStateOf(0) }
     val state by produceState<SourceState>(SourceState(loading = true), item.key, reload) {
         value = SourceState(loading = true)
-        value = try { SourceState(Online.children(item)) } catch (e: Throwable) { SourceState(error = (e.message ?: e.javaClass.simpleName).take(120)) }
+        value = try { SourceState(Online.children(item)) } catch (e: Throwable) { SourceState(error = com.sudosoc.sudoplay.online.Friendly.of(e)) }
     }
     val files = state.items.filter { it.collection == null }
     Column(Modifier.fillMaxSize()) {
@@ -312,8 +312,8 @@ private fun OnlineRow(item: OnlineItem, vm: PlayerViewModel, onOpen: (OnlineItem
         else Box {
             IconButton({ menu = true }) { Icon(I.MoreVert, null, tint = t.text.copy(alpha = 0.7f)) }
             SudoMenu(menu, { menu = false }) {
-                DropdownMenuItem(text = { Text("Play next") }, onClick = { vm.playOnline(item, 1); menu = false; android.widget.Toast.makeText(ctx, "Plays next", android.widget.Toast.LENGTH_SHORT).show() })
-                DropdownMenuItem(text = { Text("Add to queue") }, onClick = { vm.playOnline(item, 2); menu = false; android.widget.Toast.makeText(ctx, "Added to queue", android.widget.Toast.LENGTH_SHORT).show() })
+                DropdownMenuItem(text = { Text("Play next") }, onClick = { vm.playOnline(item, 1); menu = false; android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Plays next"), android.widget.Toast.LENGTH_SHORT).show() })
+                DropdownMenuItem(text = { Text("Add to queue") }, onClick = { vm.playOnline(item, 2); menu = false; android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Added to queue"), android.widget.Toast.LENGTH_SHORT).show() })
                 if (item.kind != OnlineKind.Radio) {
                     DropdownMenuItem(text = { Text("Download") }, onClick = { DownloadCenter.downloadNow(listOf(item)); menu = false })
                     DropdownMenuItem(text = { Text("Download… (choose quality)") }, onClick = { onDownload(item); menu = false })
@@ -353,7 +353,7 @@ fun DownloadDialog(vm: PlayerViewModel, items: List<OnlineItem>, groupName: Stri
                 val chosen = if (!bulk) o.getOrNull(pick) else null
                 if (chosen != null && items.size == 1) {
                     DownloadCenter.enqueue(items.first().title, items.first().subtitle.substringBefore(" • "), chosen, plId, items.first())
-                    Toast.makeText(ctx, "Downloading — see Downloads", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Downloading — see Downloads"), Toast.LENGTH_SHORT).show()
                 } else DownloadCenter.downloadNow(items, plId)
                 onClose()
             }) { Text("Download", color = t.primary) }

@@ -145,3 +145,13 @@ New **Online** tab (can be hidden from Appearance → Navigation bar):
 - Playlists in Discover (and pasted playlist links) now **open as a list** — play, shuffle, play any song; nothing is saved until you tap "Add to my playlists". "Download all" is there too.
 - A download can't start twice: repeated taps, "Download all" over songs already downloading, or songs already on the phone are skipped with a message. The player chip shows "Finding the best source…" right away.
 - Playlists: rename, and a confirmation before deleting.
+
+## v0.15.0 — Arabic, safer, easier
+- **Arabic UI** (Settings → Language, or follows the phone) with right-to-left layout; the player screen stays left-to-right. Text not translated yet stays English.
+- **Welcome pages** on first launch (language, what the app does, permission note) and a **What's new** box after updates.
+- **Search inside Settings**, a "Your name" field for the Home greeting, **Report a problem** (shares the last crash log + phone model).
+- **Crash log** kept on the phone; **friendlier errors** for YouTube / network problems; an **Offline** bar; the app reopens on the last tab; Songs sort is remembered.
+- **Backup**: restore asks first and keeps a safety copy; shows the last backup date.
+- Downloads: Cancel all, storage used. Home: Resume button, long-press a cover for a menu. Favorites toast, Rescan button when the library is empty, confirm before clearing history, loading spinner on the mini player, accessibility labels.
+- NewPipeExtractor 0.26.0 → 0.26.5.
+- Code: Settings and Now Playing screens split into smaller files.

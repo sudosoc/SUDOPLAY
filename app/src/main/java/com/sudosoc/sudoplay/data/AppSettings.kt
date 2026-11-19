@@ -91,6 +91,14 @@ class AppSettings(prefs: SharedPreferences) {
     val btnAb = BoolSetting(prefs, "b_ab", true)
 
     // Navigation bar
+    /** "auto" follows the phone's language, or "en" / "ar". */
+    val language = StringSetting(prefs, "lang", "auto")
+    val onboarded = BoolSetting(prefs, "onboarded", false)
+    val lastSeenVersion = StringSetting(prefs, "last_seen_version", "")
+    val userName = StringSetting(prefs, "user_name", "")
+    val lastTab = IntSetting(prefs, "last_tab", -1)
+    val lastBackup = StringSetting(prefs, "last_backup", "")
+    val songSort = IntSetting(prefs, "sort_songs", 0)
     val navHome = BoolSetting(prefs, "n_home", true)
     /** Home sections, top to bottom, and the ones switched off (comma-separated ids). */
     val homeOrder = StringSetting(prefs, "home_order", "continue,mix,most,favs,added,downloads,unplayed,stats")

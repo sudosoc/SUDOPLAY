@@ -189,12 +189,15 @@ fun SongRow(song: Song, vm: PlayerViewModel, onClick: () -> Unit, badge: Boolean
         Box {
             IconButton(onClick = { menu = true }) { Icon(I.MoreVert, null, tint = t.text.copy(alpha = 0.7f)) }
             SudoMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Play next") }, onClick = { vm.playNext(song); menu = false; android.widget.Toast.makeText(ctx, "Plays next", android.widget.Toast.LENGTH_SHORT).show() })
-                DropdownMenuItem(text = { Text("Add to queue") }, onClick = { vm.addToQueue(song); menu = false; android.widget.Toast.makeText(ctx, "Added to queue", android.widget.Toast.LENGTH_SHORT).show() })
+                DropdownMenuItem(text = { Text("Play next") }, onClick = { vm.playNext(song); menu = false; android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Plays next"), android.widget.Toast.LENGTH_SHORT).show() })
+                DropdownMenuItem(text = { Text("Add to queue") }, onClick = { vm.addToQueue(song); menu = false; android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Added to queue"), android.widget.Toast.LENGTH_SHORT).show() })
                 if (song.online) DropdownMenuItem(text = { Text("Download") }, onClick = { vm.downloadSongs(listOf(song)); menu = false })
                 DropdownMenuItem(
                     text = { Text(if (vm.store.isFav(song.id)) "Remove from favorites" else "Add to favorites") },
-                    onClick = { vm.store.toggleFav(song.id); menu = false },
+                    onClick = {
+                        val was = vm.store.isFav(song.id); vm.store.toggleFav(song.id); menu = false
+                        android.widget.Toast.makeText(ctx, Tr.t(if (was) "Removed from favorites" else "Added to favorites"), android.widget.Toast.LENGTH_SHORT).show()
+                    },
                 )
                 DropdownMenuItem(text = { Text("Add to playlist…") }, onClick = { vm.playlistTarget = song; menu = false })
                 if (!song.online) {
@@ -250,9 +253,10 @@ fun MiniPlayer(vm: PlayerViewModel, sheet: SheetState) {
                 Text(artistLabel(song.artist), color = t.text.copy(alpha = 0.65f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             IconButton(onClick = { vm.haptics.click(); vm.togglePlay() }) {
-                Icon(if (vm.isPlaying) I.Pause else I.PlayArrow, null, tint = t.text, modifier = Modifier.size(30.dp))
+                if (vm.onlineBusy != null) CircularProgressIndicator(Modifier.size(24.dp), color = t.primary, strokeWidth = 2.dp)
+                else Icon(if (vm.isPlaying) I.Pause else I.PlayArrow, Tr.t(if (vm.isPlaying) "Pause" else "Play"), tint = t.text, modifier = Modifier.size(30.dp))
             }
-            IconButton(onClick = { vm.haptics.click(); vm.next() }) { Icon(I.SkipNext, null, tint = t.text) }
+            IconButton(onClick = { vm.haptics.click(); vm.next() }) { Icon(I.SkipNext, Tr.t("Next"), tint = t.text) }
         }
         val p = if (vm.duration > 0) (vm.position.toFloat() / vm.duration).coerceIn(0f, 1f) else 0f
         LinearProgressIndicator(
