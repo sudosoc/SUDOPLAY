@@ -49,7 +49,7 @@ import androidx.compose.ui.graphics.luminance
 import com.sudosoc.sudoplay.PlayerViewModel
 import com.sudosoc.sudoplay.data.CoverStore
 
-const val APP_VERSION = "0.13.2"
+const val APP_VERSION = "0.14.0"
 
 @Composable
 fun SettingsTab(vm: PlayerViewModel) {
@@ -623,6 +623,7 @@ private fun NavBarPage(vm: PlayerViewModel, onBack: () -> Unit) {
             }
         }
         SectionLabel("Tabs")
+        SwitchRow("Home", "Greeting, continue listening, your mixes — sections you can reorder", s.navHome.value) { s.navHome.set(it) }
         SwitchRow("Songs", "Your whole library, sortable and searchable", s.navSongs.value) { s.navSongs.set(it) }
         SwitchRow("Albums", "Cover grid of your albums", s.navAlbums.value) { s.navAlbums.set(it) }
         SwitchRow("Browse", "Artists and folders", s.navBrowse.value) { s.navBrowse.set(it) }

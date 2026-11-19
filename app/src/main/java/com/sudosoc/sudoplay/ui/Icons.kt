@@ -148,6 +148,51 @@ object I {
         IconStyle.Ink -> restyle(Icons.Sharp.Equalizer, IconStyle.Ink)
         else -> restyle(Icons.Rounded.Equalizer, LocalIconStyle.current)
     }
+    val Home: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.Home
+        IconStyle.Filled -> Icons.Filled.Home
+        IconStyle.Outlined -> Icons.Outlined.Home
+        IconStyle.Sharp -> Icons.Sharp.Home
+        IconStyle.TwoTone -> Icons.TwoTone.Home
+        IconStyle.Ink -> restyle(Icons.Sharp.Home, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.Home, LocalIconStyle.current)
+    }
+    val KeyboardArrowUp: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.KeyboardArrowUp
+        IconStyle.Filled -> Icons.Filled.KeyboardArrowUp
+        IconStyle.Outlined -> Icons.Outlined.KeyboardArrowUp
+        IconStyle.Sharp -> Icons.Sharp.KeyboardArrowUp
+        IconStyle.TwoTone -> Icons.TwoTone.KeyboardArrowUp
+        IconStyle.Ink -> restyle(Icons.Sharp.KeyboardArrowUp, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.KeyboardArrowUp, LocalIconStyle.current)
+    }
+    val Visibility: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.Visibility
+        IconStyle.Filled -> Icons.Filled.Visibility
+        IconStyle.Outlined -> Icons.Outlined.Visibility
+        IconStyle.Sharp -> Icons.Sharp.Visibility
+        IconStyle.TwoTone -> Icons.TwoTone.Visibility
+        IconStyle.Ink -> restyle(Icons.Sharp.Visibility, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.Visibility, LocalIconStyle.current)
+    }
+    val VisibilityOff: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.VisibilityOff
+        IconStyle.Filled -> Icons.Filled.VisibilityOff
+        IconStyle.Outlined -> Icons.Outlined.VisibilityOff
+        IconStyle.Sharp -> Icons.Sharp.VisibilityOff
+        IconStyle.TwoTone -> Icons.TwoTone.VisibilityOff
+        IconStyle.Ink -> restyle(Icons.Sharp.VisibilityOff, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.VisibilityOff, LocalIconStyle.current)
+    }
+    val Edit: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.Edit
+        IconStyle.Filled -> Icons.Filled.Edit
+        IconStyle.Outlined -> Icons.Outlined.Edit
+        IconStyle.Sharp -> Icons.Sharp.Edit
+        IconStyle.TwoTone -> Icons.TwoTone.Edit
+        IconStyle.Ink -> restyle(Icons.Sharp.Edit, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.Edit, LocalIconStyle.current)
+    }
     val Explore: ImageVector @Composable get() = when (LocalIconStyle.current) {
         IconStyle.Rounded -> Icons.Rounded.Explore
         IconStyle.Filled -> Icons.Filled.Explore

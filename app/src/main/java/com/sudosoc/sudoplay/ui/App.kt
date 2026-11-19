@@ -34,6 +34,7 @@ private data class Tab(val index: Int, val label: String, val icon: ImageVector)
 private fun tabsList(vm: PlayerViewModel): List<Tab> {
     val st = vm.settings
     return buildList {
+        if (st.navHome.value) add(Tab(7, "Home", I.Home))
         if (st.navSongs.value) add(Tab(0, "Songs", I.MusicNote))
         if (st.navAlbums.value) add(Tab(1, "Albums", I.Album))
         if (st.navBrowse.value) add(Tab(2, "Browse", I.Folder))
@@ -84,7 +85,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
         fontKey = vm.settings.fontFamily.value, fontScalePct = vm.settings.fontScale.value,
         textHex = vm.settings.textColor.value, accentHex = vm.settings.accentColor.value,
     ) {
-        var tab by rememberSaveable { mutableIntStateOf(0) }
+        var tab by rememberSaveable { mutableIntStateOf(if (vm.settings.navHome.value) 7 else 0) }
         var detail by remember { mutableStateOf<Detail?>(null) }
         LaunchedEffect(vm.wantTab) { vm.wantTab?.let { w -> if (w == 5) vm.settings.navOnline.set(true); if (w == 6) vm.settings.navDownloads.set(true); tab = w; detail = null; vm.wantTab = null } }
         val scope = rememberCoroutineScope()
@@ -123,6 +124,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                                 3 -> PlaylistsTab(vm) { detail = it }
                                 5 -> OnlineTab(vm)
                                 6 -> DownloadsTab(vm)
+                                7 -> HomeTab(vm, onTab = { tab = it; detail = null })
                                 else -> SettingsTab(vm)
                             }
                         }
@@ -167,13 +169,13 @@ private fun NavBar(tabs: List<Tab>, selected: Int, vertical: Boolean, onSelect: 
         val on = tb.index == selected
         val pill by androidx.compose.animation.animateColorAsState(if (on) t.primary.copy(alpha = 0.18f) else Color.Transparent, androidx.compose.animation.core.tween(220), label = "pill")
         Column(
-            Modifier.clip(RoundedCornerShape(16.dp)).background(pill).clickable { onSelect(tb.index) }.padding(horizontal = if (tabs.size >= 6) 6.dp else 12.dp, vertical = 5.dp),
+            Modifier.clip(RoundedCornerShape(16.dp)).background(pill).clickable { onSelect(tb.index) }.padding(horizontal = if (tabs.size >= 8) 3.dp else if (tabs.size >= 6) 6.dp else 12.dp, vertical = 5.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Icon(tb.icon, null, tint = if (on) t.primary else t.text.copy(alpha = 0.6f))
             // many tabs → smaller labels that never wrap onto a second line
             Text(
-                tb.label, color = if (on) t.primary else t.text.copy(alpha = 0.6f), fontSize = if (tabs.size >= 6) 9.sp else 11.sp,
+                tb.label, color = if (on) t.primary else t.text.copy(alpha = 0.6f), fontSize = if (tabs.size >= 8) 8.sp else if (tabs.size >= 6) 9.sp else 11.sp,
                 fontWeight = if (on) FontWeight.Bold else FontWeight.Normal, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Clip,
             )
         }

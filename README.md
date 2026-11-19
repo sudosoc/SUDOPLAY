@@ -136,3 +136,7 @@ New **Online** tab (can be hidden from Appearance → Navigation bar):
 - Favorites show a small heart in lists; "Unknown artist" instead of "<unknown>".
 - Online results already saved on the phone show the phone icon.
 - Downloads: retry a failed download (or all failed), search inside Downloads when the list is long.
+
+## v0.14.0 — Home dashboard
+- New **Home** tab (first tab; switch it off in Settings → Tabs): greeting, quick buttons, and sections of covers — Continue listening, Made for you, Most played, Favorites, Recently added, Downloaded, Haven't heard yet, Your numbers.
+- Tap the pencil to **reorder** sections (arrows) or **hide** them (eye); the choice is remembered.

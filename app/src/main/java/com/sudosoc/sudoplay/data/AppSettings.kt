@@ -91,6 +91,10 @@ class AppSettings(prefs: SharedPreferences) {
     val btnAb = BoolSetting(prefs, "b_ab", true)
 
     // Navigation bar
+    val navHome = BoolSetting(prefs, "n_home", true)
+    /** Home sections, top to bottom, and the ones switched off (comma-separated ids). */
+    val homeOrder = StringSetting(prefs, "home_order", "continue,mix,most,favs,added,downloads,unplayed,stats")
+    val homeHidden = StringSetting(prefs, "home_hidden", "")
     val navSongs = BoolSetting(prefs, "n_songs", true)
     val navAlbums = BoolSetting(prefs, "n_albums", true)
     val navBrowse = BoolSetting(prefs, "n_browse", true)
