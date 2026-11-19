@@ -11,6 +11,8 @@ import java.util.UUID
 class PlaylistStore(ctx: Context) {
     private val file = File(ctx.filesDir, "playlists.json")
     val items = mutableStateListOf<Playlist>()
+    /** Called with a song id whenever it is added to a playlist (the view model uses it to remember online songs). */
+    var onAdd: ((Long) -> Unit)? = null
 
     init {
         load()
@@ -31,7 +33,12 @@ class PlaylistStore(ctx: Context) {
 
     fun rename(id: String, name: String) = update(id) { it.copy(name = name.trim().ifEmpty { it.name }) }
 
-    fun addSong(id: String, songId: Long) = update(id) {
+    /** Several at once, keeping order and skipping what is already there. */
+    fun addSongs(id: String, songIds: List<Long>) = update(id) { p -> p.copy(songIds = p.songIds + songIds.filter { it !in p.songIds }.distinct()) }
+
+    fun addSong(id: String, songId: Long) { onAdd?.invoke(songId); addSongRaw(id, songId) }
+
+    private fun addSongRaw(id: String, songId: Long) = update(id) {
         if (songId in it.songIds) it else it.copy(songIds = it.songIds + songId)
     }
 

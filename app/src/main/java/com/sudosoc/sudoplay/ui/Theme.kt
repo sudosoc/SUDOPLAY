@@ -169,7 +169,11 @@ val LocalSudo = staticCompositionLocalOf<AppTheme> { Themes.all[0] }
 val LocalLiveMode = staticCompositionLocalOf { 2 }
 
 @Composable
-fun SudoPlayTheme(themeId: String, cover: android.graphics.Bitmap? = null, liveMode: Int = 2, content: @Composable () -> Unit) {
+fun SudoPlayTheme(
+    themeId: String, cover: android.graphics.Bitmap? = null, liveMode: Int = 2,
+    fontKey: String = "default", fontScalePct: Int = 100, textHex: String = "", accentHex: String = "",
+    content: @Composable () -> Unit,
+) {
     val ctx = LocalContext.current
     var t = Themes.byId(themeId)
     if (t.dynamic && Build.VERSION.SDK_INT >= 31) {
@@ -190,6 +194,9 @@ fun SudoPlayTheme(themeId: String, cover: android.graphics.Bitmap? = null, liveM
             secondary = animateColorAsState(ct.secondary, spec, label = "c5").value, text = animateColorAsState(ct.text, spec, label = "c6").value,
         )
     }
+    // the user's own text / accent colors win over the theme (and over cover colors)
+    Fonts.parse(textHex)?.let { t = t.copy(text = it) }
+    Fonts.parse(accentHex)?.let { t = t.copy(primary = it) }
     val onPrimary = if (t.primary.luminance() > 0.5f) Color.Black else Color.White
     val scheme = (if (t.dark) darkColorScheme() else lightColorScheme()).copy(
         primary = t.primary, onPrimary = onPrimary,
@@ -211,8 +218,22 @@ fun SudoPlayTheme(themeId: String, cover: android.graphics.Bitmap? = null, liveM
             }
         }
     }
-    CompositionLocalProvider(LocalSudo provides t, LocalLiveMode provides liveMode) {
-        MaterialTheme(colorScheme = scheme, content = content)
+    val family = Fonts.byKey(fontKey).family
+    val base = androidx.compose.material3.Typography()
+    fun androidx.compose.ui.text.TextStyle.f() = if (family == null) this else copy(fontFamily = family)
+    val typo = if (family == null) base else base.copy(
+        displayLarge = base.displayLarge.f(), displayMedium = base.displayMedium.f(), displaySmall = base.displaySmall.f(),
+        headlineLarge = base.headlineLarge.f(), headlineMedium = base.headlineMedium.f(), headlineSmall = base.headlineSmall.f(),
+        titleLarge = base.titleLarge.f(), titleMedium = base.titleMedium.f(), titleSmall = base.titleSmall.f(),
+        bodyLarge = base.bodyLarge.f(), bodyMedium = base.bodyMedium.f(), bodySmall = base.bodySmall.f(),
+        labelLarge = base.labelLarge.f(), labelMedium = base.labelMedium.f(), labelSmall = base.labelSmall.f(),
+    )
+    val d = androidx.compose.ui.platform.LocalDensity.current
+    val dens = if (fontScalePct == 100) d else androidx.compose.ui.unit.Density(d.density, d.fontScale * fontScalePct / 100f)
+    CompositionLocalProvider(LocalSudo provides t, LocalLiveMode provides liveMode, androidx.compose.ui.platform.LocalDensity provides dens) {
+        MaterialTheme(colorScheme = scheme, typography = typo) {
+            androidx.compose.material3.ProvideTextStyle(androidx.compose.material3.LocalTextStyle.current.f(), content)
+        }
     }
 }
 

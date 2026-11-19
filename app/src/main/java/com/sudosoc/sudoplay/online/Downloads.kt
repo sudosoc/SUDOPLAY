@@ -38,6 +38,10 @@ class DlJob(val id: Long, val title: String, val artist: String, val option: DlO
     var state by mutableStateOf("Queued")      // Queued / Downloading / Done / Failed / Cancelled
     var error by mutableStateOf<String?>(null)
     var songId: Long = -1
+    /** Where the song came from: cover to save with it, length, and every online id that should flip to "on device" once it is saved. */
+    var thumb: String? = null
+    var durSec: Long = 0
+    var origIds: List<Long> = emptyList()
     internal var job: Job? = null
     val active get() = state == "Queued" || state == "Downloading"
 }
@@ -103,16 +107,17 @@ object DownloadCenter {
     }
 
     /** One tap: no questions asked. Starts every item in the background and says what happened. */
-    fun downloadNow(items: List<OnlineItem>, playlistId: String? = null) {
+    fun downloadNow(items: List<OnlineItem>, playlistId: String? = null, extraIds: List<Long?> = emptyList()) {
         if (items.isEmpty()) return
+        if (blockedByWifiOnly()) return
         toast(if (items.size == 1) "Looking for the best source…" else "Starting ${items.size} downloads…")
         scope.launch {
             var ok = 0
             val failed = ArrayList<String>()
-            for (it0 in items) {
+            for ((idx, it0) in items.withIndex()) {
                 val o = best(it0)
                 if (o == null) { failed.add(it0.title); continue }
-                withContext(Dispatchers.Main) { enqueue(it0.title, it0.subtitle.substringBefore(" • "), o, playlistId) }
+                withContext(Dispatchers.Main) { enqueue(it0.title, it0.subtitle.substringBefore(" • "), o, playlistId, it0, listOfNotNull(extraIds.getOrNull(idx))) }
                 ok++
             }
             toast(when {
@@ -127,8 +132,22 @@ object DownloadCenter {
         android.os.Handler(android.os.Looper.getMainLooper()).post { android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show() }
     }
 
-    fun enqueue(title: String, artist: String, option: DlOption, playlistId: String?) {
+    /** "Download only on Wi-Fi" (Settings → Online). True = refused, and the user was told. */
+    fun blockedByWifiOnly(): Boolean {
+        val wifiOnly = ctx.getSharedPreferences("sudoplay", Context.MODE_PRIVATE).getBoolean("dl_wifi_only", false)
+        if (!wifiOnly) return false
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        if (!cm.isActiveNetworkMetered) return false
+        toast("Downloads are set to Wi-Fi only — connect to Wi-Fi, or turn that off in Settings → Online")
+        return true
+    }
+
+    fun enqueue(title: String, artist: String, option: DlOption, playlistId: String?, item: OnlineItem? = null, extraIds: List<Long> = emptyList()) {
         val job = DlJob(next++, title, artist, option, playlistId)
+        if (item != null) {
+            job.thumb = item.thumb; job.durSec = item.durationSec
+            job.origIds = (listOf(Online.idFor(item.url)).filter { item.url.isNotBlank() } + extraIds).distinct()
+        } else job.origIds = extraIds
         jobs.add(0, job)
         // the notification is a bonus: if the system refuses to start the service, the download itself still runs
         runCatching { ContextCompat.startForegroundService(ctx, Intent(ctx, DownloadService::class.java)) }

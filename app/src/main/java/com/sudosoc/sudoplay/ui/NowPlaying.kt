@@ -189,7 +189,7 @@ private fun PlayerContent(vm: PlayerViewModel, pt: PlayerTheme, sheet: SheetStat
             "cover" -> song?.let { coverFor = it }
             "carmode" -> { vm.carMode = true; sheet.close() }
             "bookmark" -> { vm.addBookmark(); android.widget.Toast.makeText(vm.appContext(), "Bookmarked", android.widget.Toast.LENGTH_SHORT).show() }
-            "download" -> song?.let { s -> vm.onlineOrigin[s.id]?.let { DownloadCenter.downloadNow(listOf(it)) } ?: android.widget.Toast.makeText(vm.appContext(), "Only online songs can be downloaded", android.widget.Toast.LENGTH_SHORT).show() }
+            "download" -> song?.let { s -> if (s.online) vm.downloadCurrent() else android.widget.Toast.makeText(vm.appContext(), "This song is already on your phone", android.widget.Toast.LENGTH_SHORT).show() }
             "clip" -> song?.let { vm.clipSong = it; sheet.close() }
             "close" -> { vm.haptics.tick(); sheet.close() }
         }
@@ -251,6 +251,7 @@ private fun PlayerContent(vm: PlayerViewModel, pt: PlayerTheme, sheet: SheetStat
                 pt = pt, art = art, snap = snap, btn = btn, seekStyle = s.seekStyle.value, mode = mode, act = actions,
                 animated = true, onArtBounds = { artRect = it },
                 abSlot = { AbButton(vm) },
+                topChip = { DownloadChip(vm) },
                 middle = middle,
                 extras = {
                     btn.chips.forEach { id ->
@@ -305,6 +306,7 @@ fun PlayerLayout(
     middle: (@Composable BoxScope.() -> Unit)? = null,
     abSlot: (@Composable () -> Unit)? = null,
     extras: @Composable RowScope.() -> Unit = {},
+    topChip: (@Composable () -> Unit)? = null,
 ) {
     val t = LocalSudo.current
     Column(modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 8.dp)) {
@@ -322,6 +324,7 @@ fun PlayerLayout(
             }
             repeat(2 - topShown.size) { Spacer(Modifier.size(48.dp)) }
         }
+        if (topChip != null) Box(Modifier.padding(bottom = 4.dp)) { topChip() }
 
         // ---- art / lyrics / queue
         Box(

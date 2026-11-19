@@ -44,10 +44,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.luminance
 import com.sudosoc.sudoplay.PlayerViewModel
 import com.sudosoc.sudoplay.data.CoverStore
 
-const val APP_VERSION = "0.11.1"
+const val APP_VERSION = "0.12.0"
 
 @Composable
 fun SettingsTab(vm: PlayerViewModel) {
@@ -55,7 +57,7 @@ fun SettingsTab(vm: PlayerViewModel) {
 
     BackHandler(enabled = page != "home") {
         page = when (page) {
-            "app_themes", "player_themes", "seek_styles", "icon_styles", "player_buttons", "nav_bar" -> "appearance"
+            "app_themes", "player_themes", "seek_styles", "icon_styles", "player_buttons", "nav_bar", "fonts" -> "appearance"
             "arrange" -> "player_buttons"
             "stats", "dupes" -> "extras"
             "gesture_editor" -> "props"
@@ -76,6 +78,7 @@ fun SettingsTab(vm: PlayerViewModel) {
         "arrange" -> ArrangePage(vm) { page = "player_buttons" }
         "gesture_editor" -> GestureEditorPage(vm) { page = "props" }
         "nav_bar" -> NavBarPage(vm) { page = "appearance" }
+        "fonts" -> FontsPage(vm) { page = "appearance" }
         "stats" -> StatsPage(vm) { page = "extras" }
         "dupes" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) { SubHeader("Duplicate finder", { page = "extras" }); DuplicatesBody(vm) }
         "extras" -> ExtrasPage(vm, onOpen = { page = it }) { page = "home" }
@@ -227,6 +230,8 @@ private fun AppearancePage(vm: PlayerViewModel, onOpen: (String) -> Unit, onBack
         SectionLabel("Themes")
         NavRow(I.Apps, "App themes", "${Themes.byId(s.theme.value).name} • ${Themes.all.size} themes, ${Themes.all.count { it.live != null }} of them live") { onOpen("app_themes") }
         NavRow(I.PlayCircle, "Player themes", "${PlayerThemes.byId(s.playerTheme.value).name} • ${PlayerThemes.all.size} looks, live previews") { onOpen("player_themes") }
+        SectionLabel("Text")
+        NavRow(I.TextFields, "Fonts & colors", "${Fonts.byKey(s.fontFamily.value).label} • ${Fonts.all.size} fonts • text, accent color and size") { onOpen("fonts") }
         SectionLabel("Live backgrounds")
         RowCard {
             val tt = LocalSudo.current
@@ -620,6 +625,7 @@ private fun NavBarPage(vm: PlayerViewModel, onBack: () -> Unit) {
         SwitchRow("Browse", "Artists and folders", s.navBrowse.value) { s.navBrowse.set(it) }
         SwitchRow("Playlists", "Your playlists and smart lists", s.navPlaylists.value) { s.navPlaylists.set(it) }
         SwitchRow("Online", "YouTube, SoundCloud, radio and links — no account or API key", s.navOnline.value) { s.navOnline.set(it) }
+        SwitchRow("Downloads", "Everything you downloaded, with the running downloads on top", s.navDownloads.value) { s.navDownloads.set(it) }
         RowCard { TitleSub("Settings", "Always shown so you can never lock yourself out", Modifier.weight(1f)) }
         Spacer(Modifier.height(24.dp))
     }
@@ -734,6 +740,11 @@ private fun OnlineSettingsPage(vm: PlayerViewModel, onOpen: (String) -> Unit, on
         SectionLabel("Sources")
         HintLine("Which sources a search uses is chosen in the Online tab (Sources button). Everything works without accounts or API keys.")
         SwitchRow("Show the Online tab", "YouTube, SoundCloud, Audius, Quran, archive.org, radio and links", s.navOnline.value) { s.navOnline.set(it) }
+        SectionLabel("Downloads")
+        SwitchRow("Save cover & lyrics with downloads", "After a download finishes, fetches the picture and (from lrclib.net) the lyrics so the song looks complete offline. Sends only title and artist", s.dlExtras.value) { s.dlExtras.set(it) }
+        SwitchRow("Download on Wi-Fi only", "Refuses new downloads on mobile data", s.dlWifiOnly.value) { s.dlWifiOnly.set(it) }
+        SectionLabel("Discovery")
+        SwitchRow("Personalized “For you”", "Sends the names of your most-played artists to Deezer to find related music. Off by default; charts and genres never send anything about you", s.discoverPersonal.value) { s.discoverPersonal.set(it) }
         SectionLabel("Privacy")
         SwitchRow("Search suggestions", "Sends what you type to Google's suggestion service while you type. Off by default", suggest) { suggest = it; prefs.edit().putBoolean("online_suggest", it).apply() }
         SwitchRow("Download missing lyrics", "Asks lrclib.net (free, no account) when a song has none. Sends only title, artist, album and length", s.autoLyrics.value) { s.autoLyrics.set(it) }
@@ -943,6 +954,100 @@ private fun NetLogPage(onBack: () -> Unit) {
                     }
                 }
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- fonts & colors
+@Composable
+private fun FontsPage(vm: PlayerViewModel, onBack: () -> Unit) {
+    val s = vm.settings
+    val t = LocalSudo.current
+    var hexText by remember { mutableStateOf(s.textColor.value) }
+    var hexAccent by remember { mutableStateOf(s.accentColor.value) }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        SubHeader("Fonts & colors", onBack)
+        // live preview
+        RowCard {
+            Column(Modifier.weight(1f)) {
+                Text("SUDOPLAY", color = t.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                Text("The quick brown fox • أهلاً بك في مشغّل الموسيقى", color = t.text, style = MaterialTheme.typography.bodyLarge)
+                Text("Artist name  •  3:45  •  ١٢٣٤٥٦٧٨٩٠ 1234567890", color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        val lowContrast = Fonts.contrast(t.text, t.bgTop) < 3f
+        if (lowContrast) HintLine("⚠ This text color is hard to read on the current theme. Pick another color or reset it.")
+
+        SectionLabel("Font")
+        HintLine("Applies to the whole app. All fonts are built in and work offline. Fonts marked Arabic draw Arabic letters in their own style.")
+        Fonts.all.forEach { f ->
+            val on = s.fontFamily.value == f.key
+            RowCard(onClick = { s.fontFamily.set(f.key) }) {
+                Column(Modifier.weight(1f)) {
+                    Text(f.label + "  ·  أهلاً 123", color = if (on) t.primary else t.text, fontWeight = FontWeight.SemiBold, fontFamily = f.family)
+                    Text(f.note, color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+                }
+                if (on) Icon(I.Check, null, tint = t.primary)
+            }
+        }
+
+        SectionLabel("Text size")
+        RowCard {
+            Column(Modifier.weight(1f)) {
+                Text("${s.fontScale.value}%", color = t.text, fontWeight = FontWeight.SemiBold)
+                Slider(s.fontScale.value.toFloat(), { s.fontScale.set((it / 5).toInt() * 5) }, valueRange = 80f..140f)
+                Text("Scales every text in the app on top of your phone's own font size.", color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        SectionLabel("Text color")
+        HintLine("Overrides the theme's text color everywhere. Pick “Theme” to go back to the theme's own.")
+        ColorPicker(s.textColor.value, hexText, { hexText = it }) { s.textColor.set(it); hexText = it }
+
+        SectionLabel("Accent color")
+        HintLine("Buttons, highlights, the playing song, sliders. Pick “Theme” to go back.")
+        ColorPicker(s.accentColor.value, hexAccent, { hexAccent = it }) { s.accentColor.set(it); hexAccent = it }
+
+        RowCard(onClick = { s.fontFamily.set("default"); s.fontScale.set(100); s.textColor.set(""); s.accentColor.set(""); hexText = ""; hexAccent = "" }) {
+            Icon(I.RestartAlt, null, tint = t.primary)
+            Spacer(Modifier.width(12.dp))
+            TitleSub("Reset fonts & colors", "Back to the theme's own look", Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ColorPicker(current: String, hexText: String, onHexText: (String) -> Unit, onPick: (String) -> Unit) {
+    val t = LocalSudo.current
+    RowCard {
+        Column(Modifier.weight(1f)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                val themeOn = current.isBlank()
+                Text(
+                    "Theme", color = if (themeOn) t.onAccent else t.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.height(36.dp).clip(RoundedCornerShape(50))
+                        .then(if (themeOn) Modifier.background(Brush.horizontalGradient(listOf(t.primary, t.secondary))) else Modifier.border(1.dp, t.text.copy(alpha = 0.3f), RoundedCornerShape(50)))
+                        .clickable { onPick("") }.padding(horizontal = 14.dp, vertical = 9.dp),
+                )
+                Fonts.swatches.forEach { (name, rgb) ->
+                    val c = Color(0xFF000000 or rgb.toLong())
+                    val hex = Fonts.hexOf(c)
+                    val on = current.equals(hex, true)
+                    Box(
+                        Modifier.size(36.dp).clip(CircleShape).background(c)
+                            .border(if (on) 3.dp else 1.dp, if (on) t.primary else t.text.copy(alpha = 0.3f), CircleShape)
+                            .clickable { onPick(hex) },
+                        contentAlignment = Alignment.Center,
+                    ) { if (on) Icon(I.Check, name, tint = if (c.luminance() > 0.5f) Color.Black else Color.White, modifier = Modifier.size(18.dp)) }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                hexText, { onHexText(it); Fonts.parse(it)?.let { _ -> onPick(it.trim().let { h -> if (h.startsWith("#")) h else "#$h" }) } },
+                singleLine = true, label = { Text("Custom color (#RRGGBB)") }, modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }

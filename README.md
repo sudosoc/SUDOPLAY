@@ -108,3 +108,13 @@ New **Online** tab (can be hidden from Appearance → Navigation bar):
 ## v0.11.1
 
 - **One-tap download**: "Download" in the Online menu, "Download all" and the player's download action now start immediately with the best quality. If the source lists no qualities, the stream the app plays is used; if that fails, the same song is found on SoundCloud / Audius. "Download… (choose quality)" keeps the picker, and its Download button is never disabled any more.
+
+## v0.12 — Downloads tab, playlist import, Discovery, fonts & colors
+- **Living Download button** at the top of the player for online songs: pulses while the song is not on the phone, shows a progress ring while it downloads, then turns into "On your phone".
+- **Downloads tab** (can be switched off in Settings → Navigation bar): running downloads on top, then everything saved in Music/SUDOPLAY. Play, shuffle, select several, add them to a playlist, delete.
+- **Cover + lyrics saved with every download** (Settings → Online → "Save cover & lyrics with downloads"; lyrics come from lrclib.net and send only title + artist). Optional "Download on Wi-Fi only".
+- **Import playlists** (Playlists → Import, or paste a playlist link in the Online search box): YouTube / YouTube Music, SoundCloud, Spotify (public playlists/albums, first ~100 songs), Deezer, Audius, pasted "Artist - Title" lines, `.m3u` and Exportify-style `.csv` files.
+- **Online songs live inside playlists**: play them without downloading (found by link, or searched by name on your enabled sources), download one or the whole playlist, and every row shows an **ONLINE** or **ON DEVICE** tag. Downloading flips the row by itself; deleting the file flips it back.
+- **Discovery** on the Online tab: trending songs by genre, playlists to import with one tap (charts, Arabic, Egypt, lofi, workout…), Audius trending, and an opt-in "For you" built from your most-played artists (sends only artist names to Deezer).
+- **Fonts & colors** (Settings → Appearance): 19 fonts built in (Cairo, Tajawal, Almarai, Noto Kufi, Changa, Reem Kufi, El Messiri, Lemonada, Marhey, Amiri, Rubik, Poppins, Space Grotesk, JetBrains Mono + system families), text size, 24 text colors and 24 accent colors + custom `#RRGGBB`, with a low-contrast warning.
+- Backups now include online songs of your playlists.

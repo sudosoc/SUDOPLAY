@@ -40,6 +40,12 @@ object CoverStore {
         changed()
     }
 
+    /** Cover for one song id (used by downloads, which have a picture but no Song object yet). */
+    fun saveForId(ctx: Context, songId: Long, bmp: Bitmap) {
+        File(dir(ctx), "s$songId.jpg").outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+        changed()
+    }
+
     fun reset(ctx: Context, song: Song) {
         val d = dir(ctx)
         File(d, "s${song.id}.jpg").delete()

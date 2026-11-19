@@ -38,7 +38,7 @@ object LyricsFetcher {
 
         fun clean(x: String) = x.replace(Regex("""[\(\[].*?[\)\]]"""), "").replace(Regex("""\s+"""), " ").trim()
         val attempts = listOf(
-            "/api/get?track_name=${enc(title)}&artist_name=${enc(artist)}&album_name=${enc(song.album)}&duration=$secs",
+            "/api/get?track_name=${enc(title)}&artist_name=${enc(artist)}${if (song.album.isBlank()) "" else "&album_name=" + enc(song.album)}&duration=$secs",
             "/api/get?track_name=${enc(clean(title))}&artist_name=${enc(clean(artist))}&duration=$secs",
         )
         var found: String? = null

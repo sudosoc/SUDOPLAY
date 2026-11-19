@@ -96,6 +96,7 @@ class AppSettings(prefs: SharedPreferences) {
     val navBrowse = BoolSetting(prefs, "n_browse", true)
     val navPlaylists = BoolSetting(prefs, "n_playlists", true)
     val navOnline = BoolSetting(prefs, "n_online", true)
+    val navDownloads = BoolSetting(prefs, "n_downloads", true)
     /** bottom | top | left | right */
     val navPos = StringSetting(prefs, "n_pos", "bottom")
 
@@ -122,4 +123,21 @@ class AppSettings(prefs: SharedPreferences) {
     val keepScreenOn = BoolSetting(prefs, "f_keep_on", false)
     val lyricsDefault = BoolSetting(prefs, "f_lyrics_default", false)
     val countPlays = BoolSetting(prefs, "f_count_plays", true)
+
+    // Downloads & discovery
+    /** Save the cover and (if found) the lyrics together with every downloaded song. */
+    val dlExtras = BoolSetting(prefs, "dl_extras", true)
+    val dlWifiOnly = BoolSetting(prefs, "dl_wifi_only", false)
+    /** Discovery "For you": sends the names of your most-played artists to Deezer to find related music. */
+    val discoverPersonal = BoolSetting(prefs, "disc_personal", false)
+
+    // Fonts & colors
+    /** font family key (see Fonts.kt); "default" = the system font */
+    val fontFamily = StringSetting(prefs, "ui_font", "default")
+    /** text size, percent */
+    val fontScale = IntSetting(prefs, "ui_font_scale", 100)
+    /** "" = the theme's own text color, otherwise #RRGGBB */
+    val textColor = StringSetting(prefs, "ui_text_color", "")
+    /** "" = the theme's own accent, otherwise #RRGGBB */
+    val accentColor = StringSetting(prefs, "ui_accent_color", "")
 }

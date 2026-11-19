@@ -38,7 +38,7 @@ class OnlineItem(
 /** Everything that leaves the phone for the Online tab goes through here and is written to the network log. */
 object Online {
     private const val UA = "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"
-    private val http: OkHttpClient by lazy {
+    internal val http: OkHttpClient by lazy {
         OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(25, TimeUnit.SECONDS).followRedirects(true).build()
     }
 
@@ -60,7 +60,7 @@ object Online {
         }
     }
 
-    private fun log(method: String, url: String, code: Int, bytes: Long, ms: Long) {
+    internal fun log(method: String, url: String, code: Int, bytes: Long, ms: Long) {
         val u = Uri.parse(url)
         NetLog.add(NetEntry(System.currentTimeMillis(), method, u.host ?: "?", (u.path ?: "/").take(60), code, bytes, ms))
     }
@@ -69,7 +69,7 @@ object Online {
     fun attach(ctx: android.content.Context) { appCtx = ctx.applicationContext }
 
     @Volatile private var inited = false
-    private fun init() {
+    internal fun init() {
         if (inited) return
         synchronized(this) { if (!inited) { NewPipe.init(OkDownloader(), Localization.DEFAULT); inited = true } }
     }
@@ -123,6 +123,51 @@ object Online {
         }
     }
 
+
+    /** Looks a song up by name across the search sources (YouTube first, then SoundCloud, Audius). Strict match first, then a looser one. */
+    suspend fun findFor(title: String, artist: String, durationSec: Long = 0, kinds: List<OnlineKind> = listOf(OnlineKind.YouTube, OnlineKind.SoundCloud, OnlineKind.Audius)): OnlineItem? = withContext(Dispatchers.IO) {
+        val q = "$artist $title".replace(Regex("\\s+"), " ").trim()
+        if (q.isBlank()) return@withContext null
+        val loose = ArrayList<OnlineItem>()
+        for (k in kinds) {
+            val found = runCatching { search(k, q) }.getOrDefault(emptyList())
+            OnlineMatch.best(title, artist, durationSec, found)?.let { return@withContext it }
+            val tt = OnlineMatch.tokens(title)
+            if (tt.isNotEmpty()) found.filter { it.collection == null && it.url.isNotBlank() }.firstOrNull { c ->
+                val all = OnlineMatch.tokens(c.title + " " + c.subtitle); tt.count { it in all }.toDouble() / tt.size >= 0.5
+            }?.let { loose.add(it) }
+        }
+        loose.firstOrNull()
+    }
+
+    /** A YouTube / SoundCloud playlist link → (name, tracks). Follows "more pages" up to [max] tracks. */
+    suspend fun playlistTracks(link: String, max: Int = 300): Pair<String, List<OnlineItem>> = withContext(Dispatchers.IO) {
+        init()
+        val svc = NewPipe.getServiceByUrl(link)
+        val kind = if (svc.serviceId == ServiceList.SoundCloud.serviceId) OnlineKind.SoundCloud else OnlineKind.YouTube
+        val info = org.schabi.newpipe.extractor.playlist.PlaylistInfo.getInfo(svc, link)
+        val out = ArrayList<StreamInfoItem>(info.relatedItems.filterIsInstance<StreamInfoItem>())
+        var page = info.nextPage
+        while (page != null && out.size < max) {
+            val more = org.schabi.newpipe.extractor.playlist.PlaylistInfo.getMoreItems(svc, link, page)
+            out += more.items.filterIsInstance<StreamInfoItem>()
+            page = more.nextPage
+        }
+        (info.name ?: "Playlist") to out.take(max).map {
+            OnlineItem(kind, it.name ?: "", (it.uploaderName ?: "").removeSuffix(" - Topic"), it.thumbnails.firstOrNull()?.url, it.duration, it.url)
+        }
+    }
+
+    /** Small image download (covers), logged like everything else. */
+    fun fetchBytes(url: String): ByteArray? = runCatching {
+        val t0 = System.currentTimeMillis()
+        http.newCall(okhttp3.Request.Builder().url(url).header("User-Agent", UA).build()).execute().use { r ->
+            val b = r.body?.bytes() ?: return@use null
+            log("GET", url, r.code, b.size.toLong(), System.currentTimeMillis() - t0)
+            if (r.isSuccessful) b else null
+        }
+    }.getOrNull()
+
     // ---------------- "same song, another source" ----------------
     suspend fun alternative(item: OnlineItem): OnlineItem? = withContext(Dispatchers.IO) {
         val q = com.sudosoc.sudoplay.online.OnlineMatch.tokens(item.title + " " + item.subtitle).take(8).joinToString(" ")
@@ -141,9 +186,9 @@ object Online {
     }
 
     // ---------------- archive.org (free audio library, no key) ----------------
-    private fun getJson(url: String): String {
+    internal fun getJson(url: String, ua: String = "SUDOPLAY/0.9"): String {
         val t0 = System.currentTimeMillis()
-        http.newCall(okhttp3.Request.Builder().url(url).header("User-Agent", "SUDOPLAY/0.9").build()).execute().use { r ->
+        http.newCall(okhttp3.Request.Builder().url(url).header("User-Agent", ua).build()).execute().use { r ->
             val body = r.body?.string() ?: ""
             log("GET", url, r.code, body.length.toLong(), System.currentTimeMillis() - t0)
             if (!r.isSuccessful) throw java.io.IOException("HTTP ${r.code}")

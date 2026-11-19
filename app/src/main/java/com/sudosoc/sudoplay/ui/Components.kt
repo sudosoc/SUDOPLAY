@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.sudosoc.sudoplay.PlayerViewModel
 import com.sudosoc.sudoplay.data.CoverStore
 import com.sudosoc.sudoplay.data.Song
@@ -151,7 +152,7 @@ fun AppBackdrop(art: Bitmap?) {
 }
 
 @Composable
-fun SongRow(song: Song, vm: PlayerViewModel, onClick: () -> Unit, extraMenu: (@Composable (dismiss: () -> Unit) -> Unit)? = null) {
+fun SongRow(song: Song, vm: PlayerViewModel, onClick: () -> Unit, badge: Boolean = false, extraMenu: (@Composable (dismiss: () -> Unit) -> Unit)? = null) {
     val t = LocalSudo.current
     val isCur = vm.current?.id == song.id
     var menu by remember { mutableStateOf(false) }
@@ -168,10 +169,13 @@ fun SongRow(song: Song, vm: PlayerViewModel, onClick: () -> Unit, extraMenu: (@C
                 fontWeight = if (isCur) FontWeight.Bold else FontWeight.Medium,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                "${song.artist}  •  ${fmt(song.durationMs)}", color = t.text.copy(alpha = 0.6f),
-                style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (badge) { SourceBadge(song.online); Spacer(Modifier.width(6.dp)) }
+                Text(
+                    (if (song.durationMs > 0) "${song.artist}  •  ${fmt(song.durationMs)}" else song.artist), color = t.text.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         if (isCur && vm.isPlaying) Icon(I.Equalizer, null, tint = t.primary, modifier = Modifier.padding(end = 4.dp))
         Box {
@@ -179,18 +183,36 @@ fun SongRow(song: Song, vm: PlayerViewModel, onClick: () -> Unit, extraMenu: (@C
             SudoMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { Text("Play next") }, onClick = { vm.playNext(song); menu = false })
                 DropdownMenuItem(text = { Text("Add to queue") }, onClick = { vm.addToQueue(song); menu = false })
+                if (song.online) DropdownMenuItem(text = { Text("Download") }, onClick = { vm.downloadSongs(listOf(song)); menu = false })
                 DropdownMenuItem(
                     text = { Text(if (vm.store.isFav(song.id)) "Remove from favorites" else "Add to favorites") },
                     onClick = { vm.store.toggleFav(song.id); menu = false },
                 )
                 DropdownMenuItem(text = { Text("Add to playlist…") }, onClick = { vm.playlistTarget = song; menu = false })
-                DropdownMenuItem(text = { Text("Share") }, onClick = { shareSong(ctx, song); menu = false })
-                DropdownMenuItem(text = { Text("Song info") }, onClick = { vm.infoSong = song; menu = false })
-                DropdownMenuItem(text = { Text("Make video clip") }, onClick = { vm.clipSong = song; menu = false })
-                DropdownMenuItem(text = { Text("Find online") }, onClick = { vm.findOnline(song); menu = false })
+                if (!song.online) {
+                    DropdownMenuItem(text = { Text("Share") }, onClick = { shareSong(ctx, song); menu = false })
+                    DropdownMenuItem(text = { Text("Song info") }, onClick = { vm.infoSong = song; menu = false })
+                    DropdownMenuItem(text = { Text("Make video clip") }, onClick = { vm.clipSong = song; menu = false })
+                    DropdownMenuItem(text = { Text("Find online") }, onClick = { vm.findOnline(song); menu = false })
+                }
                 extraMenu?.invoke { menu = false }
             }
         }
+    }
+}
+
+/** Tiny tag that says where a song plays from: the internet (not downloaded) or the phone itself. */
+@Composable
+fun SourceBadge(online: Boolean) {
+    val t = LocalSudo.current
+    val c = if (online) t.secondary else t.primary
+    Row(
+        Modifier.clip(RoundedCornerShape(50)).background(c.copy(alpha = 0.16f)).padding(horizontal = 6.dp, vertical = 1.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(if (online) I.CloudQueue else I.PhoneAndroid, null, tint = c, modifier = Modifier.size(11.dp))
+        Spacer(Modifier.width(3.dp))
+        Text(if (online) "ONLINE" else "ON DEVICE", color = c, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 

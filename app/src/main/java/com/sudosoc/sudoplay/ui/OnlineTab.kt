@@ -79,6 +79,11 @@ fun OnlineTab(vm: PlayerViewModel) {
             history = (listOf(q) + history.filter { it != q }).take(12)
             prefs.edit().putString("online_hist", history.joinToString("\n")).apply()
         }
+        if (com.sudosoc.sudoplay.online.PlaylistImport.isPlaylistLink(q)) {
+            vm.onlineNote = "Importing that playlist — find it in Playlists"
+            vm.importPlaylist(q, "") { vm.onlineNote = it }
+            return
+        }
         if (Online.isLink(q)) {
             scope.launch {
                 try {
@@ -165,6 +170,7 @@ fun OnlineTab(vm: PlayerViewModel) {
                         vm.favSheikhs.forEach { (name, key) -> OnlinePill("★ $name", false) { stack.add(OnlineItem(OnlineKind.Quran, name, "", null, 0, "", key)) } }
                     }
                 }
+                DiscoveryPanel(vm)
                 Text("Try", color = t.text, fontWeight = FontWeight.Bold)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("العفاسي", "سورة الكهف", "عبد الباسط", "ماهر المعيقلي سورة البقرة", "lofi").forEach { s -> OnlinePill(s, false) { runSearch(s) } }
@@ -339,7 +345,7 @@ fun DownloadDialog(vm: PlayerViewModel, items: List<OnlineItem>, groupName: Stri
                 // a quality you picked is used as is; otherwise (bulk, nothing listed, or the lookup failed) the default chain decides
                 val chosen = if (!bulk) o.getOrNull(pick) else null
                 if (chosen != null && items.size == 1) {
-                    DownloadCenter.enqueue(items.first().title, items.first().subtitle.substringBefore(" • "), chosen, plId)
+                    DownloadCenter.enqueue(items.first().title, items.first().subtitle.substringBefore(" • "), chosen, plId, items.first())
                     Toast.makeText(ctx, "Downloading — see Downloads", Toast.LENGTH_SHORT).show()
                 } else DownloadCenter.downloadNow(items, plId)
                 onClose()
@@ -407,7 +413,7 @@ private fun DownloadsDialog(onClose: () -> Unit) {
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun OnlinePill(text: String, selected: Boolean, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
+fun OnlinePill(text: String, selected: Boolean, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
     val t = LocalSudo.current
     val shape = RoundedCornerShape(50)
     Text(

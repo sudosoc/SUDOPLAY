@@ -436,6 +436,114 @@ object I {
         IconStyle.Ink -> restyle(Icons.AutoMirrored.Sharp.ArrowBack, IconStyle.Ink)
         else -> restyle(Icons.AutoMirrored.Rounded.ArrowBack, LocalIconStyle.current)
     }
+    val Download: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.Download
+        IconStyle.Filled -> Icons.Filled.Download
+        IconStyle.Outlined -> Icons.Outlined.Download
+        IconStyle.Sharp -> Icons.Sharp.Download
+        IconStyle.TwoTone -> Icons.TwoTone.Download
+        IconStyle.Ink -> restyle(Icons.Sharp.Download, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.Download, LocalIconStyle.current)
+    }
+    val CloudQueue: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.CloudQueue
+        IconStyle.Filled -> Icons.Filled.CloudQueue
+        IconStyle.Outlined -> Icons.Outlined.CloudQueue
+        IconStyle.Sharp -> Icons.Sharp.CloudQueue
+        IconStyle.TwoTone -> Icons.TwoTone.CloudQueue
+        IconStyle.Ink -> restyle(Icons.Sharp.CloudQueue, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.CloudQueue, LocalIconStyle.current)
+    }
+    val PhoneAndroid: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.PhoneAndroid
+        IconStyle.Filled -> Icons.Filled.PhoneAndroid
+        IconStyle.Outlined -> Icons.Outlined.PhoneAndroid
+        IconStyle.Sharp -> Icons.Sharp.PhoneAndroid
+        IconStyle.TwoTone -> Icons.TwoTone.PhoneAndroid
+        IconStyle.Ink -> restyle(Icons.Sharp.PhoneAndroid, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.PhoneAndroid, LocalIconStyle.current)
+    }
+    val PlaylistAdd: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.PlaylistAdd
+        IconStyle.Filled -> Icons.Filled.PlaylistAdd
+        IconStyle.Outlined -> Icons.Outlined.PlaylistAdd
+        IconStyle.Sharp -> Icons.Sharp.PlaylistAdd
+        IconStyle.TwoTone -> Icons.TwoTone.PlaylistAdd
+        IconStyle.Ink -> restyle(Icons.Sharp.PlaylistAdd, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.PlaylistAdd, LocalIconStyle.current)
+    }
+    val TextFields: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.TextFields
+        IconStyle.Filled -> Icons.Filled.TextFields
+        IconStyle.Outlined -> Icons.Outlined.TextFields
+        IconStyle.Sharp -> Icons.Sharp.TextFields
+        IconStyle.TwoTone -> Icons.TwoTone.TextFields
+        IconStyle.Ink -> restyle(Icons.Sharp.TextFields, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.TextFields, LocalIconStyle.current)
+    }
+    val FormatColorText: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.FormatColorText
+        IconStyle.Filled -> Icons.Filled.FormatColorText
+        IconStyle.Outlined -> Icons.Outlined.FormatColorText
+        IconStyle.Sharp -> Icons.Sharp.FormatColorText
+        IconStyle.TwoTone -> Icons.TwoTone.FormatColorText
+        IconStyle.Ink -> restyle(Icons.Sharp.FormatColorText, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.FormatColorText, LocalIconStyle.current)
+    }
+    val Refresh: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.Refresh
+        IconStyle.Filled -> Icons.Filled.Refresh
+        IconStyle.Outlined -> Icons.Outlined.Refresh
+        IconStyle.Sharp -> Icons.Sharp.Refresh
+        IconStyle.TwoTone -> Icons.TwoTone.Refresh
+        IconStyle.Ink -> restyle(Icons.Sharp.Refresh, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.Refresh, LocalIconStyle.current)
+    }
+    val FileOpen: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.FileOpen
+        IconStyle.Filled -> Icons.Filled.FileOpen
+        IconStyle.Outlined -> Icons.Outlined.FileOpen
+        IconStyle.Sharp -> Icons.Sharp.FileOpen
+        IconStyle.TwoTone -> Icons.TwoTone.FileOpen
+        IconStyle.Ink -> restyle(Icons.Sharp.FileOpen, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.FileOpen, LocalIconStyle.current)
+    }
+    val SelectAll: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.SelectAll
+        IconStyle.Filled -> Icons.Filled.SelectAll
+        IconStyle.Outlined -> Icons.Outlined.SelectAll
+        IconStyle.Sharp -> Icons.Sharp.SelectAll
+        IconStyle.TwoTone -> Icons.TwoTone.SelectAll
+        IconStyle.Ink -> restyle(Icons.Sharp.SelectAll, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.SelectAll, LocalIconStyle.current)
+    }
+    val Cancel: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.Cancel
+        IconStyle.Filled -> Icons.Filled.Cancel
+        IconStyle.Outlined -> Icons.Outlined.Cancel
+        IconStyle.Sharp -> Icons.Sharp.Cancel
+        IconStyle.TwoTone -> Icons.TwoTone.Cancel
+        IconStyle.Ink -> restyle(Icons.Sharp.Cancel, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.Cancel, LocalIconStyle.current)
+    }
+    val ContentPaste: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.ContentPaste
+        IconStyle.Filled -> Icons.Filled.ContentPaste
+        IconStyle.Outlined -> Icons.Outlined.ContentPaste
+        IconStyle.Sharp -> Icons.Sharp.ContentPaste
+        IconStyle.TwoTone -> Icons.TwoTone.ContentPaste
+        IconStyle.Ink -> restyle(Icons.Sharp.ContentPaste, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.ContentPaste, LocalIconStyle.current)
+    }
+    val TrendingUp: ImageVector @Composable get() = when (LocalIconStyle.current) {
+        IconStyle.Rounded -> Icons.Rounded.TrendingUp
+        IconStyle.Filled -> Icons.Filled.TrendingUp
+        IconStyle.Outlined -> Icons.Outlined.TrendingUp
+        IconStyle.Sharp -> Icons.Sharp.TrendingUp
+        IconStyle.TwoTone -> Icons.TwoTone.TrendingUp
+        IconStyle.Ink -> restyle(Icons.Sharp.TrendingUp, IconStyle.Ink)
+        else -> restyle(Icons.Rounded.TrendingUp, LocalIconStyle.current)
+    }
 }
 
 

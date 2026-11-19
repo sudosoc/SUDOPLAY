@@ -66,6 +66,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = MusicRepository(ctx)
     private val prefs = ctx.getSharedPreferences("sudoplay", Context.MODE_PRIVATE)
     val store = PlaylistStore(ctx)
+    /** Online songs that live in playlists, and which of them are now also on the phone. */
+    val olib = com.sudosoc.sudoplay.data.OnlineLibrary(ctx)
 
     // ---- settings / theme ----
     val settings = AppSettings(prefs)
@@ -168,9 +170,239 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     // ---- online (YouTube / SoundCloud / radio / links) ----
     init {
         com.sudosoc.sudoplay.online.Online.attach(ctx)
+        store.onAdd = { sid -> rememberOnline(sid) }
         com.sudosoc.sudoplay.online.DownloadCenter.attach(ctx) { job ->
             job.playlistId?.let { if (job.songId > 0) store.addSong(it, job.songId) }
+            if (job.songId > 0) { job.origIds.forEach { olib.mapLocal(it, job.songId) }; saveExtras(job) }
             refreshLibrary()
+        }
+    }
+
+    // ---- online songs inside playlists ----
+    /** A playlist / favorites id → something we can show: the phone's file, the downloaded copy of an online song, or the online song itself. */
+    fun entrySong(id: Long): Song? {
+        byId[id]?.let { return it }
+        olib.localFor(id)?.let { l -> byId[l]?.let { return it } }
+        return olib.get(id)?.let { olib.stub(it) }
+    }
+    fun playlistSongs(id: String): List<Song> = (store.get(id)?.songIds ?: emptyList()).mapNotNull(::entrySong).distinctBy { it.id }
+    /** Where a resolved online song came from when it was played from a "name only" entry. */
+    private val stubOf = HashMap<Long, Long>()
+    private fun entryItem(e: com.sudosoc.sudoplay.data.OnlineEntry) = com.sudosoc.sudoplay.online.OnlineItem(
+        runCatching { com.sudosoc.sudoplay.online.OnlineKind.valueOf(e.kind) }.getOrDefault(com.sudosoc.sudoplay.online.OnlineKind.Link),
+        e.title, e.artist, e.thumb, e.durationSec, e.url)
+
+    /** Called when an online song is added to a playlist / favorites: keeps what is needed to list and replay it. */
+    private fun rememberOnline(sid: Long) {
+        if (sid >= 0 || olib.get(sid) != null) return
+        val s = onlineSongs[sid] ?: queue.firstOrNull { it.id == sid } ?: current?.takeIf { it.id == sid } ?: return
+        val origin = onlineOrigin[sid]
+        olib.put(com.sudosoc.sudoplay.data.OnlineEntry(
+            sid, origin?.kind?.name ?: "Link", s.title, s.artist, s.artUrl, s.durationMs / 1000,
+            origin?.url ?: s.uri.toString(),
+        ))
+    }
+
+    private fun onlineSources(): List<com.sudosoc.sudoplay.online.OnlineKind> {
+        val on = (prefs.getString("online_src", null) ?: "").split(",").toSet()
+        val l = listOf(com.sudosoc.sudoplay.online.OnlineKind.YouTube, com.sudosoc.sudoplay.online.OnlineKind.SoundCloud, com.sudosoc.sudoplay.online.OnlineKind.Audius)
+        return if (on.size <= 1) l else l.filter { it.name in on }.ifEmpty { l }
+    }
+
+    /** The playable online item for a stored entry (searching by name when the entry has no link yet, and remembering the find). */
+    private suspend fun itemFor(e: com.sudosoc.sudoplay.data.OnlineEntry): com.sudosoc.sudoplay.online.OnlineItem? {
+        if (!e.needsSearch) return entryItem(e)
+        val found = com.sudosoc.sudoplay.online.Online.findFor(e.title, e.artist, e.durationSec, onlineSources()) ?: return null
+        olib.put(com.sudosoc.sudoplay.data.OnlineEntry(e.id, found.kind.name, e.title, e.artist, e.thumb ?: found.thumb, if (e.durationSec > 0) e.durationSec else found.durationSec, found.url))
+        return found
+    }
+
+    /** Resolve one online item to a playable Song, trying another source when YouTube refuses. */
+    private suspend fun resolveOnline(item: com.sudosoc.sudoplay.online.OnlineItem, allowAlt: Boolean = true): Song {
+        val on = com.sudosoc.sudoplay.online.Online
+        val s = try { on.resolve(item) } catch (e: Throwable) {
+            val alt = if (item.kind == com.sudosoc.sudoplay.online.OnlineKind.YouTube && allowAlt) on.alternative(item) else null
+            if (alt == null) throw e
+            onlineNote = "YouTube would not give the audio, so this is the ${alt.kind.label} version"
+            onlineOrigin[on.idFor(alt.url)] = alt
+            on.resolve(alt)
+        }
+        onlineSongs[s.id] = s
+        onlineOrigin.putIfAbsent(s.id, item)
+        return s
+    }
+
+    /** A playable copy of any song: local ones as they are, online "stubs" resolved fresh (stream links expire). */
+    private suspend fun materialize(song: Song): Song? {
+        if (!song.online) return song
+        val e = olib.get(song.id) ?: return song
+        olib.localFor(song.id)?.let { l -> byId[l]?.let { return it } }
+        val item = itemFor(e) ?: return null
+        return runCatching { resolveOnline(item) }.getOrNull()?.also { if (it.id != song.id) stubOf[it.id] = song.id }
+    }
+
+    private var mixJob: Job? = null
+    /** Play a list that may contain online songs: the first one starts as soon as it resolves, the rest are queued behind it in order. */
+    fun playList(list: List<Song>, index: Int, shuffleOn: Boolean = false) {
+        if (list.isEmpty()) return
+        if (list.none { it.online }) { play(list, index, if (shuffleOn) true else null); return }
+        val at = index.coerceIn(0, list.lastIndex)
+        val order = if (shuffleOn) list.shuffled() else list.drop(at) + list.take(at)
+        mixJob?.cancel()
+        mixJob = viewModelScope.launch {
+            var started = false
+            var failed = 0
+            for (s in order) {
+                val m = withContext(Dispatchers.IO) { materialize(s) }
+                if (m == null) { failed++; continue }
+                val c = controller ?: continue
+                if (!started) { playInternal(listOf(m), 0, null); started = true }
+                else c.addMediaItem(toItem(m))
+            }
+            if (!started) onlineError = "None of these songs could be played right now (the sources may be blocking this network)"
+            else if (failed > 0) onlineNote = "$failed song${if (failed == 1) "" else "s"} could not be found and were skipped"
+        }
+    }
+
+    /** Download an online song (or every online song of a list): finds the source by name when needed. */
+    fun downloadSongs(list: List<Song>) {
+        val todo = list.filter { it.online && olib.localFor(it.id) == null }
+        if (todo.isEmpty()) { android.widget.Toast.makeText(ctx, "Already on your phone", android.widget.Toast.LENGTH_SHORT).show(); return }
+        if (com.sudosoc.sudoplay.online.DownloadCenter.blockedByWifiOnly()) return
+        android.widget.Toast.makeText(ctx, if (todo.size == 1) "Looking for the best source…" else "Preparing ${todo.size} songs…", android.widget.Toast.LENGTH_SHORT).show()
+        viewModelScope.launch {
+            val items = ArrayList<com.sudosoc.sudoplay.online.OnlineItem>(); val ids = ArrayList<Long?>()
+            for (s in todo) {
+                val e = olib.get(s.id)
+                val item = withContext(Dispatchers.IO) {
+                    runCatching { if (e != null) itemFor(e) else onlineOrigin[s.id] ?: com.sudosoc.sudoplay.online.OnlineItem(com.sudosoc.sudoplay.online.OnlineKind.Link, s.title, s.artist, s.artUrl, s.durationMs / 1000, s.uri.toString()) }.getOrNull()
+                }
+                if (item != null) { items += item; ids += s.id }
+            }
+            if (items.isEmpty()) android.widget.Toast.makeText(ctx, "Couldn't find a source for these songs", android.widget.Toast.LENGTH_LONG).show()
+            else com.sudosoc.sudoplay.online.DownloadCenter.downloadNow(items, null, ids)
+        }
+    }
+
+    /** The song that is playing right now, as something to download (covers songs played from playlist entries too). */
+    fun downloadCurrent() {
+        val s = current ?: return
+        if (!s.online) return
+        val item = onlineOrigin[s.id] ?: com.sudosoc.sudoplay.online.OnlineItem(com.sudosoc.sudoplay.online.OnlineKind.Link, s.title, s.artist, s.artUrl, s.durationMs / 1000, s.uri.toString())
+        if (com.sudosoc.sudoplay.online.DownloadCenter.blockedByWifiOnly()) return
+        com.sudosoc.sudoplay.online.DownloadCenter.downloadNow(listOf(item), null, listOf(s.id, stubOf[s.id]))
+    }
+    /** Local copy of the playing online song, if it has been downloaded. */
+    fun localCopyOf(s: Song?): Song? {
+        s ?: return null
+        if (!s.online) return null
+        val ids = listOfNotNull(s.id, stubOf[s.id], onlineOrigin[s.id]?.let { com.sudosoc.sudoplay.online.Online.idFor(it.url) })
+        return ids.firstNotNullOfOrNull { olib.localFor(it) }?.let { byId[it] }
+    }
+
+    // ---- cover + lyrics saved next to a download ----
+    private fun saveExtras(job: com.sudosoc.sudoplay.online.DlJob) {
+        if (!settings.dlExtras.value) return
+        val id = job.songId
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                job.thumb?.let { u ->
+                    com.sudosoc.sudoplay.online.Online.fetchBytes(u)?.let { b ->
+                        android.graphics.BitmapFactory.decodeByteArray(b, 0, b.size)?.let { bmp ->
+                            val side = minOf(bmp.width, bmp.height)
+                            val sq = if (bmp.width == bmp.height) bmp else android.graphics.Bitmap.createBitmap(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side)
+                            CoverStore.saveForId(ctx, id, sq)
+                        }
+                    }
+                }
+            }
+            runCatching {
+                val artist = lyricArtist(job.artist)
+                val tmp = Song(id, lyricTitle(job.title, artist), artist, "", 0, job.durSec * 1000, android.net.Uri.EMPTY, 0, 0)
+                LyricsFetcher.fetch(ctx, tmp)
+            }
+        }
+    }
+
+    /** Downloaded songs: everything in Music/SUDOPLAY plus whatever a playlist entry was mapped to. */
+    fun downloadedSongs(): List<Song> {
+        val mapped = olib.localIds()
+        return rawSongs.filter { it.folder.contains("SUDOPLAY", true) || it.id in mapped }.sortedByDescending { it.dateAdded }
+    }
+
+    /** Deletes the files (only ones this app made can be removed without a system prompt); reports how many went. */
+    fun deleteDownloads(list: List<Song>, done: (Int) -> Unit) {
+        viewModelScope.launch {
+            val gone = HashSet<Long>()
+            withContext(Dispatchers.IO) {
+                for (s in list) {
+                    val n = runCatching { ctx.contentResolver.delete(s.uri, null, null) }.getOrDefault(0)
+                    if (n > 0) gone += s.id
+                }
+            }
+            if (gone.isNotEmpty()) {
+                olib.unmapLocal(gone)
+                store.items.toList().forEach { p -> gone.forEach { g -> if (g in p.songIds) store.removeSong(p.id, g) } }
+                val c = controller
+                if (c != null) for (i in c.mediaItemCount - 1 downTo 0) if (c.getMediaItemAt(i).mediaId.toLongOrNull() in gone) c.removeMediaItem(i)
+                refreshLibrary()
+            }
+            done(gone.size)
+        }
+    }
+
+    // ---- playlist import ----
+    var importBusy by mutableStateOf<String?>(null); private set
+    /** [input] is a link, or pasted / loaded text. Creates the playlist and calls [done] with a message (error or result). */
+    fun importPlaylist(input: String, nameHint: String, done: (String) -> Unit) {
+        if (importBusy != null) return
+        importBusy = "Reading the playlist…"
+        viewModelScope.launch {
+            try {
+                val text = input.trim()
+                val one = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                val imp = withContext(Dispatchers.IO) {
+                    if (one.size == 1 && com.sudosoc.sudoplay.online.Online.isLink(one[0])) com.sudosoc.sudoplay.online.PlaylistImport.fromLink(one[0])
+                    else com.sudosoc.sudoplay.online.PlaylistImport.parseText(nameHint.ifBlank { "Imported playlist" }, text)
+                }
+                if (imp.tracks.isEmpty()) { done("No songs found in that"); return@launch }
+                importBusy = "Adding ${imp.tracks.size} songs…"
+                val entries = imp.tracks.map { t ->
+                    val key = if (t.url.isNotBlank()) t.url else "search:" + (t.artist + "|" + t.title).lowercase().replace(Regex("\\s+"), " ").trim()
+                    com.sudosoc.sudoplay.data.OnlineEntry(com.sudosoc.sudoplay.online.Online.idFor(key), t.kind?.name ?: "Link", t.title, t.artist, t.thumb, t.durationSec, t.url)
+                }
+                olib.putAll(entries)
+                val p = store.create(nameHint.ifBlank { imp.name })
+                store.addSongs(p.id, entries.map { it.id })
+                done("Imported ${entries.size} songs into “${p.name}”")
+            } catch (e: Throwable) {
+                done((e.message ?: e.javaClass.simpleName).take(160))
+            } finally { importBusy = null }
+        }
+    }
+
+    /** Turns suggested songs (Discovery charts) into a playlist of "name only" entries. */
+    fun saveTracksAsPlaylist(name: String, tracks: List<com.sudosoc.sudoplay.online.DTrack>): String {
+        val entries = tracks.map { t ->
+            val key = "search:" + (t.artist + "|" + t.title).lowercase().replace(Regex("\\s+"), " ").trim()
+            com.sudosoc.sudoplay.data.OnlineEntry(com.sudosoc.sudoplay.online.Online.idFor(key), "Link", t.title, t.artist, t.thumb, t.durationSec, "")
+        }
+        olib.putAll(entries)
+        val p = store.create(name)
+        store.addSongs(p.id, entries.map { it.id })
+        return p.name
+    }
+
+    private fun lyricArtist(a: String) = a.replace(Regex("""\s*-\s*Topic$""", RegexOption.IGNORE_CASE), "").replace(Regex("""VEVO$""", RegexOption.IGNORE_CASE), "").trim()
+    /** "Artist - Song (Official Video)" → "Song" when the left part is the artist. */
+    private fun lyricTitle(title: String, artist: String): String {
+        val m = Regex("""\s[-–—]\s""").find(title) ?: return title
+        val l = title.substring(0, m.range.first); val r = title.substring(m.range.last + 1)
+        val at = com.sudosoc.sudoplay.online.OnlineMatch.tokens(artist)
+        return when {
+            com.sudosoc.sudoplay.online.OnlineMatch.tokens(l).any { it in at } -> r
+            com.sudosoc.sudoplay.online.OnlineMatch.tokens(r).any { it in at } -> l
+            else -> title
         }
     }
     val onlineSongs = HashMap<Long, Song>()
@@ -195,21 +427,15 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     /** mode 0 = play now, 1 = play next, 2 = add to queue */
     fun playOnline(item: com.sudosoc.sudoplay.online.OnlineItem, mode: Int = 0, fallbackTried: Boolean = false) {
         if (onlineBusy != null) return
+        // already downloaded? play the file on the phone
+        olib.localFor(com.sudosoc.sudoplay.online.Online.idFor(item.url))?.let { l -> byId[l] }?.let { loc ->
+            when (mode) { 0 -> play(listOf(loc), 0); 1 -> playNext(loc); else -> addToQueue(loc) }
+            return
+        }
         onlineBusy = item.url; onlineError = null; onlineNote = null
         viewModelScope.launch {
             try {
-                val s = try {
-                    com.sudosoc.sudoplay.online.Online.resolve(item)
-                } catch (e: Throwable) {
-                    // YouTube often refuses: look for the same song on SoundCloud / Audius instead
-                    val alt = if (item.kind == com.sudosoc.sudoplay.online.OnlineKind.YouTube && !fallbackTried) com.sudosoc.sudoplay.online.Online.alternative(item) else null
-                    if (alt == null) throw e
-                    onlineNote = "YouTube would not give the audio, so this is the ${alt.kind.label} version"
-                    onlineOrigin[com.sudosoc.sudoplay.online.Online.idFor(alt.url)] = alt
-                    com.sudosoc.sudoplay.online.Online.resolve(alt)
-                }
-                onlineSongs[s.id] = s
-                onlineOrigin.putIfAbsent(s.id, item)
+                val s = resolveOnline(item, !fallbackTried)
                 val c = controller
                 if (mode == 0 || c == null || c.mediaItemCount == 0) play(listOf(s), 0)
                 else if (mode == 1) c.addMediaItem(c.currentMediaItemIndex + 1, toItem(s))
@@ -217,6 +443,21 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Throwable) {
                 onlineError = (e.message ?: e.javaClass.simpleName).take(160)
             } finally { onlineBusy = null }
+        }
+    }
+    /** Play something by name only (Discovery charts, imported "Artist - Title" lines). */
+    fun playByName(title: String, artist: String, durationSec: Long = 0, thumb: String? = null) {
+        if (onlineBusy != null) return
+        onlineBusy = "name:$title"; onlineError = null; onlineNote = null
+        viewModelScope.launch {
+            try {
+                val item = com.sudosoc.sudoplay.online.Online.findFor(title, artist, durationSec, onlineSources())
+                    ?: throw java.io.IOException("Could not find “$title” on your search sources")
+                onlineBusy = null
+                playOnline(if (thumb != null && item.thumb == null) com.sudosoc.sudoplay.online.OnlineItem(item.kind, item.title, item.subtitle, thumb, item.durationSec, item.url) else item)
+            } catch (e: Throwable) {
+                onlineError = (e.message ?: e.javaClass.simpleName).take(160)
+            } finally { if (onlineBusy?.startsWith("name:") == true) onlineBusy = null }
         }
     }
     /** Plays a list of direct-file items (a reciter's surahs, an archive.org item…) as a queue, starting at [start]. */
@@ -618,7 +859,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         ).build()
 
     // ---- playback actions ----
-    fun play(list: List<Song>, index: Int, shuffleOn: Boolean? = null) {
+    fun play(list: List<Song>, index: Int, shuffleOn: Boolean? = null) { mixJob?.cancel(); playInternal(list, index, shuffleOn) }
+    private fun playInternal(list: List<Song>, index: Int, shuffleOn: Boolean?) {
         val c = controller ?: return
         if (list.isEmpty()) return
         shuffleOn?.let { c.shuffleModeEnabled = it }
@@ -654,12 +896,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun playNext(song: Song) {
+        if (song.online && olib.get(song.id) != null) { viewModelScope.launch { materialize(song)?.let { playNext(it) } }; return }
         val c = controller ?: return
         if (c.mediaItemCount == 0) play(listOf(song), 0)
         else c.addMediaItem(c.currentMediaItemIndex + 1, toItem(song))
     }
 
     fun addToQueue(song: Song) {
+        if (song.online && olib.get(song.id) != null) { viewModelScope.launch { materialize(song)?.let { addToQueue(it) } }; return }
         val c = controller ?: return
         if (c.mediaItemCount == 0) play(listOf(song), 0) else c.addMediaItem(toItem(song))
     }

@@ -226,9 +226,16 @@ private fun ArtistList(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
 fun PlaylistsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
     val t = LocalSudo.current
     var creating by remember { mutableStateOf(false) }
+    var importing by remember { mutableStateOf(false) }
+    var importMsg by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxSize()) {
         ScreenTitle("Playlists")
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { PillButton("New playlist", I.Add, filled = true) { creating = true } }
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PillButton("New playlist", I.Add, filled = true) { creating = true }
+            PillButton("Import", I.PlaylistAdd) { importing = true }
+        }
+        vm.importBusy?.let { Text(it, color = t.secondary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp)) }
+        importMsg?.let { Text(it, color = t.text.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp)) }
         LazyColumn(Modifier.padding(top = 6.dp)) {
             items(Smart.entries.toList(), key = { "smart_" + it.name }) { k ->
                 val icon = when (k) {
@@ -252,7 +259,7 @@ fun PlaylistsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
             items(vm.store.items.toList(), key = { it.id }) { p ->
                 var menu by remember { mutableStateOf(false) }
                 Row(Modifier.fillMaxWidth().clickable { onOpen(Detail.Pl(p.id)) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    val first = remember(p.songIds, vm.songs) { vm.songs.firstOrNull { it.id in p.songIds } }
+                    val first = remember(p.songIds, vm.songs, vm.olib.version) { p.songIds.firstNotNullOfOrNull { vm.entrySong(it) } }
                     if (p.id == FAV_ID) Box(Modifier.size(54.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(t.primary, t.secondary))), contentAlignment = Alignment.Center) {
                         Icon(I.Favorite, null, tint = t.onAccent)
                     } else Artwork(first, Modifier.size(54.dp), 128, 14.dp)
@@ -270,6 +277,43 @@ fun PlaylistsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
         }
     }
     if (creating) NameDialog("New playlist", onDismiss = { creating = false }) { vm.store.create(it); creating = false }
+    if (importing) ImportPlaylistDialog(vm, onDismiss = { importing = false }) { importMsg = it }
+}
+
+/** Import from a link (YouTube, SoundCloud, Spotify, Deezer, Audius), pasted song names, or a .m3u / .csv file. */
+@Composable
+fun ImportPlaylistDialog(vm: PlayerViewModel, onDismiss: () -> Unit, onResult: (String) -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var text by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) runCatching {
+            val body = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }.orEmpty()
+            text = body
+            if (name.isBlank()) name = (uri.lastPathSegment ?: "").substringAfterLast('/').substringBeforeLast('.').take(40)
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss, title = { Text("Import playlist") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Paste a playlist link (YouTube, SoundCloud, Spotify, Deezer, Audius), or a list of songs — one “Artist - Title” per line. " +
+                        "Songs stay online until you download them; the whole playlist can be downloaded in one tap.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedTextField(text, { text = it }, label = { Text("Link or song list") }, minLines = 3, maxLines = 6, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("Playlist name (optional)") }, modifier = Modifier.fillMaxWidth())
+                TextButton({ picker.launch("*/*") }) { Icon(I.FileOpen, null); Spacer(Modifier.width(6.dp)); Text("From a file (.m3u, .csv, .txt)") }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                if (text.isNotBlank()) { vm.importPlaylist(text, name.trim(), onResult); onDismiss() }
+            }, enabled = text.isNotBlank()) { Text("Import") }
+        },
+        dismissButton = { TextButton(onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable
@@ -318,8 +362,8 @@ fun DetailScreen(vm: PlayerViewModel, detail: Detail, onBack: () -> Unit) {
         is Detail.Folder -> detail.path.substringAfterLast('/').ifEmpty { detail.path } to vm.songs.filter { it.folder == detail.path }.sortedBy { it.title.lowercase() }
         is Detail.SmartList -> detail.kind.title to vm.smart(detail.kind)
         is Detail.Pl -> {
-            val p = vm.store.get(detail.id)
-            (p?.name ?: "Playlist") to (p?.songIds?.mapNotNull { id -> vm.songs.firstOrNull { it.id == id } } ?: emptyList())
+            vm.olib.version
+            (vm.store.get(detail.id)?.name ?: "Playlist") to vm.playlistSongs(detail.id)
         }
     }
     Column(Modifier.fillMaxSize()) {
@@ -327,14 +371,23 @@ fun DetailScreen(vm: PlayerViewModel, detail: Detail, onBack: () -> Unit) {
             IconButton(onBack) { Icon(I.ArrowBack, null, tint = t.text) }
             Text(title, color = t.text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+        val isPl = detail is Detail.Pl
+        val onlineCount = if (isPl) list.count { it.online } else 0
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PillButton("Play", I.PlayArrow, filled = true) { vm.play(list, 0, false) }
-            PillButton("Shuffle", I.Shuffle) { vm.shufflePlay(list) }
+            PillButton("Play", I.PlayArrow, filled = true) { vm.playList(list, 0) }
+            PillButton("Shuffle", I.Shuffle) { vm.playList(list, 0, true) }
+            if (onlineCount > 0) PillButton("Download $onlineCount", I.Download) { vm.downloadSongs(list) }
         }
-        if (list.isEmpty()) EmptyState("Nothing here yet")
+        if (isPl && list.isNotEmpty()) Text(
+            "${list.size - onlineCount} on your phone • $onlineCount online", color = t.text.copy(alpha = 0.6f),
+            style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 18.dp),
+        )
+        vm.onlineError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp)) }
+        vm.onlineNote?.let { Text(it, color = t.secondary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp)) }
+        if (list.isEmpty()) EmptyState(if (isPl) "Nothing here yet. Add songs from anywhere, or import a playlist." else "Nothing here yet")
         LazyColumn {
             itemsIndexed(list, key = { _, s -> s.id }) { i, s ->
-                SongRow(s, vm, onClick = { vm.play(list, i) }, extraMenu = if (detail is Detail.Pl) { dismiss ->
+                SongRow(s, vm, onClick = { vm.playList(list, i) }, badge = isPl, extraMenu = if (detail is Detail.Pl) { dismiss ->
                     DropdownMenuItem(text = { Text("Remove from playlist") }, onClick = { vm.store.removeSong(detail.id, s.id); dismiss() })
                 } else null)
             }

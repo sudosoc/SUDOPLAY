@@ -39,6 +39,7 @@ private fun tabsList(vm: PlayerViewModel): List<Tab> {
         if (st.navBrowse.value) add(Tab(2, "Browse", I.Folder))
         if (st.navPlaylists.value) add(Tab(3, "Playlists", I.LibraryMusic))
         if (st.navOnline.value) add(Tab(5, "Online", I.Explore))
+        if (st.navDownloads.value) add(Tab(6, "Downloads", I.Download))
         add(Tab(4, "Settings", I.Settings))
     }
 }
@@ -78,10 +79,14 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
     val iconStyle = runCatching { IconStyle.valueOf(vm.settings.iconStyle.value) }.getOrDefault(IconStyle.Rounded)
     CompositionLocalProvider(LocalIconStyle provides iconStyle) {
     val coverArt by rememberArt(vm.current, 64)
-    SudoPlayTheme(vm.themeId, cover = if (vm.settings.coverColors.value) coverArt else null, liveMode = vm.settings.liveMode.value) {
+    SudoPlayTheme(
+        vm.themeId, cover = if (vm.settings.coverColors.value) coverArt else null, liveMode = vm.settings.liveMode.value,
+        fontKey = vm.settings.fontFamily.value, fontScalePct = vm.settings.fontScale.value,
+        textHex = vm.settings.textColor.value, accentHex = vm.settings.accentColor.value,
+    ) {
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var detail by remember { mutableStateOf<Detail?>(null) }
-        LaunchedEffect(vm.wantTab) { vm.wantTab?.let { w -> if (w == 5) vm.settings.navOnline.set(true); tab = w; detail = null; vm.wantTab = null } }
+        LaunchedEffect(vm.wantTab) { vm.wantTab?.let { w -> if (w == 5) vm.settings.navOnline.set(true); if (w == 6) vm.settings.navDownloads.set(true); tab = w; detail = null; vm.wantTab = null } }
         val scope = rememberCoroutineScope()
         val sheet = remember { SheetState(scope) }
         val cfg = androidx.compose.ui.platform.LocalConfiguration.current
@@ -117,6 +122,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                                 2 -> BrowseTab(vm) { detail = it }
                                 3 -> PlaylistsTab(vm) { detail = it }
                                 5 -> OnlineTab(vm)
+                                6 -> DownloadsTab(vm)
                                 else -> SettingsTab(vm)
                             }
                         }
