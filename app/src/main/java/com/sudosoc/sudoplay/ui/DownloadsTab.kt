@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,7 +24,12 @@ import com.sudosoc.sudoplay.online.DownloadCenter
 fun DownloadsTab(vm: PlayerViewModel) {
     val t = LocalSudo.current
     val ctx = LocalContext.current
-    val list = remember(vm.rawSongs, vm.olib.version) { vm.downloadedSongs() }
+    val all = remember(vm.rawSongs, vm.olib.version) { vm.downloadedSongs() }
+    var query by rememberSaveable { mutableStateOf("") }
+    val list = remember(all, query) {
+        val q = foldForSearch(query)
+        if (q.isBlank()) all else all.filter { foldForSearch(it.title).contains(q) || foldForSearch(it.artist).contains(q) }
+    }
     var selecting by remember { mutableStateOf(false) }
     var picked by remember { mutableStateOf(setOf<Long>()) }
     var confirmDelete by remember { mutableStateOf<List<Song>?>(null) }
@@ -39,6 +45,7 @@ fun DownloadsTab(vm: PlayerViewModel) {
             else "${list.size} songs • ${if (totalMin >= 60) "${totalMin / 60} h ${totalMin % 60} min" else "$totalMin min"} • works offline",
             color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 18.dp),
         )
+        if (all.size > 8) SearchField(query) { query = it }
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (!selecting) {
                 PillButton("Play", I.PlayArrow, filled = true) { vm.play(list, 0, false) }
@@ -59,7 +66,10 @@ fun DownloadsTab(vm: PlayerViewModel) {
                 item("jobs_head") {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(if (jobs.any { it.active }) "In progress" else "Finished", color = t.text, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        if (jobs.any { !it.active }) TextButton({ DownloadCenter.clearFinished() }) { Text("Clear finished") }
+                        if (jobs.any { it.state == "Failed" }) TextButton({
+                            jobs.filter { it.state == "Failed" }.forEach { j -> DownloadCenter.jobs.remove(j); DownloadCenter.enqueue(j.title, j.artist, j.option, j.playlistId, null, j.origIds) }
+                        }) { Text("Retry failed") }
+                        if (jobs.any { !it.active }) TextButton({ DownloadCenter.clearFinished() }) { Text("Clear") }
                     }
                 }
                 items(jobs, key = { "job_" + it.id }) { j ->
@@ -76,11 +86,13 @@ fun DownloadsTab(vm: PlayerViewModel) {
                                 )
                             }
                         }
+                        if (j.state == "Failed") IconButton({ DownloadCenter.jobs.remove(j); DownloadCenter.enqueue(j.title, j.artist, j.option, j.playlistId, null, j.origIds) }) { Icon(I.Refresh, "retry", tint = t.primary) }
                         if (j.active) IconButton({ DownloadCenter.cancel(j) }) { Icon(I.Close, null, tint = t.text.copy(alpha = 0.7f)) }
                     }
                 }
             }
-            if (list.isEmpty() && jobs.isEmpty()) item("empty") {
+            if (list.isEmpty() && all.isNotEmpty()) item("nomatch") { EmptyState("Nothing matches “$query”", "Clear search") { query = "" } }
+            if (all.isEmpty() && jobs.isEmpty()) item("empty") {
                 EmptyState("Nothing downloaded yet. Tap Download on any online song, or open an imported playlist and download it all.")
             }
             items(list, key = { "dl_" + it.id }) { s ->

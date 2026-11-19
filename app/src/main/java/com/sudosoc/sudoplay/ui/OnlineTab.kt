@@ -274,6 +274,7 @@ private fun CollectionScreen(vm: PlayerViewModel, item: OnlineItem, onBack: () -
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun OnlineRow(item: OnlineItem, vm: PlayerViewModel, onOpen: (OnlineItem) -> Unit, onDownload: (OnlineItem) -> Unit, onPlay: ((OnlineItem) -> Unit)? = null, showSource: Boolean = false) {
     val t = LocalSudo.current
@@ -284,8 +285,14 @@ private fun OnlineRow(item: OnlineItem, vm: PlayerViewModel, onOpen: (OnlineItem
     var menu by remember { mutableStateOf(false) }
     val loading = vm.onlineBusy == item.url && item.url.isNotEmpty()
     val folder = item.collection != null
+    // already saved on this phone? (re-read whenever the download list changes)
+    val saved = !folder && item.url.isNotEmpty() && remember(vm.olib.version, vm.rawSongs) { vm.olib.localFor(com.sudosoc.sudoplay.online.Online.idFor(item.url)) != null }
     Row(
-        Modifier.fillMaxWidth().clickable { if (folder) onOpen(item) else (onPlay ?: { vm.playOnline(it, 0) })(item) }.padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth()
+            .combinedClickable(
+                onClick = { if (folder) onOpen(item) else (onPlay ?: { vm.playOnline(it, 0) })(item) },
+                onLongClick = { if (!folder) { vm.haptics.click(); menu = true } },
+            ).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(52.dp)) {
@@ -300,13 +307,14 @@ private fun OnlineRow(item: OnlineItem, vm: PlayerViewModel, onOpen: (OnlineItem
                 color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
+        if (saved) { SourceBadge(false); Spacer(Modifier.width(2.dp)) }
         if (loading) CircularProgressIndicator(Modifier.size(22.dp), color = t.primary, strokeWidth = 2.dp)
         else if (folder) Icon(I.KeyboardArrowDown, null, tint = t.text.copy(alpha = 0.5f), modifier = Modifier.size(22.dp).padding(end = 2.dp))
         else Box {
             IconButton({ menu = true }) { Icon(I.MoreVert, null, tint = t.text.copy(alpha = 0.7f)) }
             SudoMenu(menu, { menu = false }) {
-                DropdownMenuItem(text = { Text("Play next") }, onClick = { vm.playOnline(item, 1); menu = false })
-                DropdownMenuItem(text = { Text("Add to queue") }, onClick = { vm.playOnline(item, 2); menu = false })
+                DropdownMenuItem(text = { Text("Play next") }, onClick = { vm.playOnline(item, 1); menu = false; android.widget.Toast.makeText(ctx, "Plays next", android.widget.Toast.LENGTH_SHORT).show() })
+                DropdownMenuItem(text = { Text("Add to queue") }, onClick = { vm.playOnline(item, 2); menu = false; android.widget.Toast.makeText(ctx, "Added to queue", android.widget.Toast.LENGTH_SHORT).show() })
                 if (item.kind != OnlineKind.Radio) {
                     DropdownMenuItem(text = { Text("Download") }, onClick = { DownloadCenter.downloadNow(listOf(item)); menu = false })
                     DropdownMenuItem(text = { Text("Download… (choose quality)") }, onClick = { onDownload(item); menu = false })

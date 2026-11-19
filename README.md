@@ -130,3 +130,9 @@ New **Online** tab (can be hidden from Appearance → Navigation bar):
 - "On your phone" / "ONLINE" text replaced by a small icon: phone = on this phone, cloud = online.
 - Downloads tab: finished jobs no longer clutter "In progress"; "Fix name, cover & lyrics…" on any downloaded song.
 - Bottom bar labels never wrap.
+
+## v0.13.2 — small polish
+- Long-press any song (library or online) to open its menu; "Plays next" / "Added to queue" confirmations.
+- Favorites show a small heart in lists; "Unknown artist" instead of "<unknown>".
+- Online results already saved on the phone show the phone icon.
+- Downloads: retry a failed download (or all failed), search inside Downloads when the list is long.

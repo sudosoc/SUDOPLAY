@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -151,6 +152,10 @@ fun AppBackdrop(art: Bitmap?) {
     }
 }
 
+/** "<unknown>" and empty artists read as plain words. */
+fun artistLabel(a: String) = if (a.isBlank() || a.equals("<unknown>", true)) "Unknown artist" else a
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun SongRow(song: Song, vm: PlayerViewModel, onClick: () -> Unit, badge: Boolean = false, extraMenu: (@Composable (dismiss: () -> Unit) -> Unit)? = null) {
     val t = LocalSudo.current
@@ -158,7 +163,9 @@ fun SongRow(song: Song, vm: PlayerViewModel, onClick: () -> Unit, badge: Boolean
     var menu by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 7.dp),
+        Modifier.fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = { vm.haptics.click(); menu = true })
+            .padding(horizontal = 16.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Artwork(song, Modifier.size(50.dp), 128, 12.dp)
@@ -172,17 +179,18 @@ fun SongRow(song: Song, vm: PlayerViewModel, onClick: () -> Unit, badge: Boolean
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (badge) { SourceBadge(song.online); Spacer(Modifier.width(6.dp)) }
                 Text(
-                    (if (song.durationMs > 0) "${song.artist}  •  ${fmt(song.durationMs)}" else song.artist), color = t.text.copy(alpha = 0.6f),
+                    (if (song.durationMs > 0) "${artistLabel(song.artist)}  •  ${fmt(song.durationMs)}" else artistLabel(song.artist)), color = t.text.copy(alpha = 0.6f),
                     style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
         }
+        if (vm.store.isFav(song.id)) Icon(I.Favorite, "favorite", tint = t.primary.copy(alpha = 0.8f), modifier = Modifier.padding(end = 4.dp).size(16.dp))
         if (isCur && vm.isPlaying) Icon(I.Equalizer, null, tint = t.primary, modifier = Modifier.padding(end = 4.dp))
         Box {
             IconButton(onClick = { menu = true }) { Icon(I.MoreVert, null, tint = t.text.copy(alpha = 0.7f)) }
             SudoMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Play next") }, onClick = { vm.playNext(song); menu = false })
-                DropdownMenuItem(text = { Text("Add to queue") }, onClick = { vm.addToQueue(song); menu = false })
+                DropdownMenuItem(text = { Text("Play next") }, onClick = { vm.playNext(song); menu = false; android.widget.Toast.makeText(ctx, "Plays next", android.widget.Toast.LENGTH_SHORT).show() })
+                DropdownMenuItem(text = { Text("Add to queue") }, onClick = { vm.addToQueue(song); menu = false; android.widget.Toast.makeText(ctx, "Added to queue", android.widget.Toast.LENGTH_SHORT).show() })
                 if (song.online) DropdownMenuItem(text = { Text("Download") }, onClick = { vm.downloadSongs(listOf(song)); menu = false })
                 DropdownMenuItem(
                     text = { Text(if (vm.store.isFav(song.id)) "Remove from favorites" else "Add to favorites") },
@@ -239,7 +247,7 @@ fun MiniPlayer(vm: PlayerViewModel, sheet: SheetState) {
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(song.title, color = t.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(song.artist, color = t.text.copy(alpha = 0.65f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(artistLabel(song.artist), color = t.text.copy(alpha = 0.65f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             IconButton(onClick = { vm.haptics.click(); vm.togglePlay() }) {
                 Icon(if (vm.isPlaying) I.Pause else I.PlayArrow, null, tint = t.text, modifier = Modifier.size(30.dp))
