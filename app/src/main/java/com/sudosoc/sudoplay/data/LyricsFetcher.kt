@@ -22,6 +22,9 @@ object LyricsFetcher {
     private fun lrc(ctx: Context, id: Long) = File(dir(ctx), "$id.lrc")
     private fun miss(ctx: Context, id: Long) = File(dir(ctx), "$id.none")
 
+    /** The saved lyrics text (LRC), for writing into the audio file. */
+    fun raw(ctx: Context, id: Long): String? = runCatching { lrc(ctx, id).takeIf { it.exists() }?.readText() }.getOrNull()
+
     fun cached(ctx: Context, song: Song): Lyrics? = runCatching {
         val f = lrc(ctx, song.id)
         if (f.exists()) LyricsLoader.parse(f.readText()) else null

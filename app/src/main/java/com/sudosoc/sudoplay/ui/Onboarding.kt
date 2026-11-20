@@ -93,8 +93,8 @@ private fun M3Chip(label: String, on: Boolean, onClick: () -> Unit) {
 /** Shown once after an update. */
 @Composable
 fun WhatsNew(version: String, onClose: () -> Unit) {
-    val en = listOf("A song already on your phone is never downloaded again — it's added to the playlist instead", "Downloads continue when you switch between mobile data and Wi-Fi, and wait for Wi-Fi if you chose Wi-Fi only", "Unfinished downloads carry on after the app is closed", "Songs you already have play from the phone, even when opened from Discover or search", "A song that can't play is skipped automatically", "Streams retry through network changes")
-    val ar = listOf("الأغنية الموجودة على موبايلك ما بتتحملش تاني — بتتضاف للقائمة بدل كده", "التحميل بيكمّل لما تغيّر من داتا لواي فاي، وبيستنى الواي فاي لو اخترت كده", "التحميلات اللي ما خلصتش بتكمّل بعد ما تقفل التطبيق", "الأغاني اللي عندك بتشتغل من الموبايل حتى لو فتحتها من اكتشف أو البحث", "الأغنية اللي مش بتشتغل بيتخطاها تلقائيًا", "البث بيحاول تاني لما الشبكة تتغيّر")
+    val en = listOf("Touch and hold any song to select several — then add them to a playlist, the queue, favorites or download them together", "Every menu is now one clean sheet from the bottom of the screen, in your theme, never cut off at an edge", "Streamed songs are kept for instant replay and survive short network drops (size and quality in Settings → Online)", "Offline mode: shows and plays only what is on your phone — it also switches on by itself when the internet drops", "Downloaded files now carry their name, cover and lyrics inside them", "Undo instead of “are you sure?” when you delete a playlist or remove songs")
+    val ar = listOf("اضغط مطوّلاً على أي أغنية عشان تحدد أكتر من واحدة — وبعدها ضيفهم لقائمة أو للدور أو للمفضلة أو حمّلهم مع بعض", "كل القوايم بقت ورقة واحدة نضيفة من تحت الشاشة، بنفس ثيمك، ومش بتتقطع من أي ناحية", "الأغاني اللي بتسمعها أونلاين بتتحفظ عشان تشتغل تاني فوراً وتكمّل لو النت قطع شوية (الحجم والجودة من الإعدادات ← أونلاين)", "وضع أوفلاين: بيعرض ويشغّل اللي على موبايلك بس — وبيشتغل لوحده لما النت يقطع", "الملفات المحمّلة بقت شايلة اسمها وغلافها وكلماتها جواها", "تراجع بدل «متأكد؟» لما تمسح قائمة أو تشيل أغاني")
     AlertDialog(
         onDismissRequest = onClose, title = { Text(if (Tr.ar) "الجديد في $version" else "What's new in $version") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { (if (Tr.ar) ar else en).forEach { Text("• $it") } } },
@@ -107,7 +107,7 @@ fun WhatsNew(version: String, onClose: () -> Unit) {
 fun OfflineBanner() {
     val t = LocalSudo.current
     Text(
-        "Offline — only downloaded songs will play", color = t.onAccent, fontSize = 12.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.Medium,
+        if (com.sudosoc.sudoplay.data.NetState.online) "Offline mode — only songs on this phone will play" else "No internet — only songs on this phone will play", color = t.onAccent, fontSize = 12.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.Medium,
         modifier = Modifier.fillMaxWidth().background(t.primary.copy(alpha = 0.9f)).padding(vertical = 4.dp),
     )
 }

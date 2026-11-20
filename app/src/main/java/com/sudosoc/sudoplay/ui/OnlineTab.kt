@@ -151,6 +151,11 @@ fun OnlineTab(vm: PlayerViewModel) {
                 OnlinePill(k.label, on, onLong = { setEnabled(setOf(k)) }) { setEnabled(if (on && enabled.size > 1) enabled - k else enabled + k) }
             }
         }
+        if (vm.settings.offlineMode.value) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(I.CloudOff, null, tint = t.primary, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
+            Text("Offline mode is on — playing only what is on this phone", color = t.text.copy(alpha = 0.8f), fontSize = 13.sp, modifier = Modifier.weight(1f))
+            TextButton({ vm.settings.offlineMode.set(false) }) { Text("Turn off") }
+        }
         vm.onlineError?.let { Text(it, color = t.text, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
         vm.onlineNote?.let { Text(it, color = t.primary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) }
 
@@ -309,16 +314,17 @@ private fun OnlineRow(item: OnlineItem, vm: PlayerViewModel, onOpen: (OnlineItem
         if (saved) { SourceBadge(false); Spacer(Modifier.width(2.dp)) }
         if (loading) CircularProgressIndicator(Modifier.size(22.dp), color = t.primary, strokeWidth = 2.dp)
         else if (folder) Icon(I.KeyboardArrowDown, null, tint = t.text.copy(alpha = 0.5f), modifier = Modifier.size(22.dp).padding(end = 2.dp))
-        else Box {
-            IconButton({ menu = true }) { Icon(I.MoreVert, null, tint = t.text.copy(alpha = 0.7f)) }
-            SudoMenu(menu, { menu = false }) {
-                DropdownMenuItem(text = { Text("Play next") }, onClick = { vm.playOnline(item, 1); menu = false; android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Plays next"), android.widget.Toast.LENGTH_SHORT).show() })
-                DropdownMenuItem(text = { Text("Add to queue") }, onClick = { vm.playOnline(item, 2); menu = false; android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Added to queue"), android.widget.Toast.LENGTH_SHORT).show() })
-                if (item.kind != OnlineKind.Radio) {
-                    DropdownMenuItem(text = { Text("Download") }, onClick = { DownloadCenter.downloadNow(listOf(item)); menu = false })
-                    DropdownMenuItem(text = { Text("Download… (choose quality)") }, onClick = { onDownload(item); menu = false })
-                }
-            }
+        else IconButton({ menu = true }) { Icon(I.MoreVert, "More options", tint = t.text.copy(alpha = 0.7f)) }
+    }
+    if (menu) SudoSheet(
+        { menu = false }, title = item.title, subtitle = item.subtitle,
+        header = { ArtImage(thumb, Modifier.size(52.dp), 12.dp) },
+    ) { close ->
+        SheetAction(I.SkipNext, "Play next") { vm.playOnline(item, 1); toastText(ctx, "Plays next"); close() }
+        SheetAction(I.QueueMusic, "Add to queue") { vm.playOnline(item, 2); toastText(ctx, "Added to queue"); close() }
+        if (item.kind != OnlineKind.Radio) {
+            SheetAction(I.Download, "Download") { DownloadCenter.downloadNow(listOf(item)); close() }
+            SheetAction(I.Tune, "Download… (choose quality)") { close(); onDownload(item) }
         }
     }
 }
@@ -338,7 +344,7 @@ fun DownloadDialog(vm: PlayerViewModel, items: List<OnlineItem>, groupName: Stri
         try { opts = DownloadCenter.options(items.first()) } catch (e: Throwable) { err = (e.message ?: "failed").take(140) }
     }
     AlertDialog(
-        onDismissRequest = onClose, containerColor = t.bgTop,
+        onDismissRequest = onClose,
         title = { Text(if (bulk) "Download ${items.size} files" else "Download", color = t.text) },
         confirmButton = {
             TextButton(onClick = {
@@ -394,7 +400,7 @@ fun DownloadDialog(vm: PlayerViewModel, items: List<OnlineItem>, groupName: Stri
 private fun DownloadsDialog(onClose: () -> Unit) {
     val t = LocalSudo.current
     AlertDialog(
-        onDismissRequest = onClose, containerColor = t.bgTop,
+        onDismissRequest = onClose,
         title = { Text("Downloads", color = t.text) },
         confirmButton = { TextButton(onClose) { Text("Close", color = t.primary) } },
         dismissButton = { if (DownloadCenter.jobs.any { !it.active }) TextButton({ DownloadCenter.clearFinished() }) { Text("Clear finished", color = t.text.copy(alpha = 0.7f)) } },
@@ -447,7 +453,7 @@ private fun SourcesDialog(enabled: Set<OnlineKind>, suggestOn: Boolean, onSource
         OnlineKind.Radio to "Live stations (noisy for song searches, so off by default)",
     )
     AlertDialog(
-        onDismissRequest = onClose, containerColor = t.bgTop,
+        onDismissRequest = onClose,
         title = { Text("Search in", color = t.text) },
         confirmButton = { TextButton(onClose) { Text("Done", color = t.primary) } },
         dismissButton = {

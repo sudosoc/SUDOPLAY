@@ -72,7 +72,7 @@ class OnlineLibrary(ctx: Context) {
         runCatching {
             val e = JSONArray(); entries.values.forEach { e.put(JSONObject().put("id", it.id).put("k", it.kind).put("t", it.title).put("a", it.artist).put("th", it.thumb ?: "").put("d", it.durationSec).put("u", it.url)) }
             val l = JSONArray(); local.forEach { (k, v) -> l.put(JSONArray().put(k).put(v)) }
-            file.writeText(JSONObject().put("e", e).put("l", l).toString())
+            AsyncFile.write(file, JSONObject().put("e", e).put("l", l).toString())
         }
     }
 }

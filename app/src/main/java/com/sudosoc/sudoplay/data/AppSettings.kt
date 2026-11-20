@@ -140,6 +140,12 @@ class AppSettings(prefs: SharedPreferences) {
     /** Save the cover and (if found) the lyrics together with every downloaded song. */
     val dlExtras = BoolSetting(prefs, "dl_extras", true)
     val dlWifiOnly = BoolSetting(prefs, "dl_wifi_only", false)
+    /** 0 = Auto (best on Wi-Fi, lighter on mobile data), 1 = always best, 2 = data saver. */
+    val streamQuality = IntSetting(prefs, "stream_quality", 0)
+    /** Size of the replay cache for streamed songs, in MB (0 = off). */
+    val streamCacheMb = IntSetting(prefs, "stream_cache_mb", 512)
+    /** Show only what is on this phone (downloads and local files); hides online results that would not play without internet. */
+    val offlineMode = BoolSetting(prefs, "offline_mode", false)
     /** Discovery "For you": sends the names of your most-played artists to Deezer to find related music. */
     val discoverPersonal = BoolSetting(prefs, "disc_personal", false)
 

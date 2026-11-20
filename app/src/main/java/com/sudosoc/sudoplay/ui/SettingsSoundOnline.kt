@@ -103,9 +103,6 @@ internal fun CarPage(vm: PlayerViewModel, onBack: () -> Unit) {
             TitleSub("Open car mode now", null, Modifier.weight(1f))
         }
         SwitchRow("Play when the app opens", "Resumes your last queue by itself — useful when the head unit launches the app", s.autoPlayLaunch.value) { s.autoPlayLaunch.set(it) }
-        SectionLabel("Player")
-        SwitchRow("Keep screen on", "While the player page is open", s.keepScreenOn.value) { s.keepScreenOn.set(it) }
-        SwitchRow("Open on lyrics", "Show lyrics first instead of the cover", s.lyricsDefault.value) { s.lyricsDefault.set(it) }
         SectionLabel("Player page")
         SwitchRow("Keep screen on", "While the player page is open", s.keepScreenOn.value) { s.keepScreenOn.set(it) }
         SwitchRow("Open on lyrics", "Show lyrics first instead of the cover", s.lyricsDefault.value) { s.lyricsDefault.set(it) }
@@ -126,6 +123,16 @@ internal fun OnlineSettingsPage(vm: PlayerViewModel, onOpen: (String) -> Unit, o
         SectionLabel("Sources")
         HintLine("Which sources a search uses is chosen in the Online tab (Sources button). Everything works without accounts or API keys.")
         SwitchRow("Show the Online tab", "YouTube, SoundCloud, Audius, Quran, archive.org, radio and links", s.navOnline.value) { s.navOnline.set(it) }
+        SectionLabel("Streaming")
+        ChoiceRow("Streaming quality", "Auto uses the best on Wi-Fi and a lighter file on mobile data", listOf(0 to "Auto", 1 to "High", 2 to "Data saver"), s.streamQuality.value) { s.streamQuality.set(it) }
+        ChoiceRow("Replay cache", "Songs you stream are kept so they replay instantly and survive short network drops", listOf(0 to "Off", 256 to "256 MB", 512 to "512 MB", 1024 to "1 GB", 2048 to "2 GB"), s.streamCacheMb.value) { s.streamCacheMb.set(it) }
+        var cached by remember { mutableStateOf(com.sudosoc.sudoplay.playback.StreamCache.usedBytes(ctx) / 1_048_576) }
+        RowCard(onClick = { com.sudosoc.sudoplay.playback.StreamCache.clear(ctx); cached = 0; toastText(ctx, "Cache cleared") }) {
+            Icon(I.DeleteSweep, null, tint = t.primary)
+            Spacer(Modifier.width(12.dp))
+            TitleSub("Clear replay cache", "$cached MB used", Modifier.weight(1f))
+        }
+        SwitchRow("Offline mode", "Shows only what is on this phone, so nothing you tap needs internet", s.offlineMode.value) { s.offlineMode.set(it) }
         SectionLabel("Downloads")
         SwitchRow("Save cover & lyrics with downloads", "After a download finishes, fetches the picture and (from lrclib.net) the lyrics so the song looks complete offline. Sends only title and artist", s.dlExtras.value) { s.dlExtras.set(it) }
         SwitchRow("Download on Wi-Fi only", "Refuses new downloads on mobile data", s.dlWifiOnly.value) { s.dlWifiOnly.set(it) }

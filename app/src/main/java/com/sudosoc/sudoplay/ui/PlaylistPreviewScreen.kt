@@ -61,13 +61,15 @@ fun PlaylistPreviewScreen(vm: PlayerViewModel, p: PlayerViewModel.PlaylistPrevie
                                     color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                            Box {
-                                IconButton({ menu = true }) { Icon(I.MoreVert, null, tint = t.text.copy(alpha = 0.7f)) }
-                                SudoMenu(menu, { menu = false }) {
-                                    DropdownMenuItem(text = { Text("Play next") }, onClick = { menu = false; vm.previewSongs(p).getOrNull(i)?.let { s -> vm.playNext(s); android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Plays next"), android.widget.Toast.LENGTH_SHORT).show() } })
-                                    DropdownMenuItem(text = { Text("Add to queue") }, onClick = { menu = false; vm.previewSongs(p).getOrNull(i)?.let { s -> vm.addToQueue(s); android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Added to queue"), android.widget.Toast.LENGTH_SHORT).show() } })
-                                    DropdownMenuItem(text = { Text("Download") }, onClick = { menu = false; vm.previewSongs(p).getOrNull(i)?.let { s -> vm.downloadSongs(listOf(s)) } })
-                                }
+                            IconButton({ menu = true }) { Icon(I.MoreVert, "More options", tint = t.text.copy(alpha = 0.7f)) }
+                            if (menu) SudoSheet(
+                                { menu = false }, title = tr.title, subtitle = artistLabel(tr.artist),
+                                header = { ArtImage(thumb, Modifier.size(52.dp), 12.dp) },
+                            ) { close ->
+                                SheetAction(I.SkipNext, "Play next") { close(); vm.previewSongs(p).getOrNull(i)?.let { s -> vm.playNext(s); toastText(ctx, "Plays next") } }
+                                SheetAction(I.QueueMusic, "Add to queue") { close(); vm.previewSongs(p).getOrNull(i)?.let { s -> vm.addToQueue(s); toastText(ctx, "Added to queue") } }
+                                SheetAction(I.Download, "Download") { close(); vm.previewSongs(p).getOrNull(i)?.let { s -> vm.downloadSongs(listOf(s)) } }
+                                SheetAction(I.PlaylistAdd, "Add to playlist…") { close(); vm.previewSongs(p).getOrNull(i)?.let { s -> vm.playlistTarget = s } }
                             }
                         }
                     }

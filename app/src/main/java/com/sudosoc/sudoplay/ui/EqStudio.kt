@@ -136,7 +136,7 @@ private fun SoundTab(vm: PlayerViewModel, onSave: () -> Unit) {
             var menu by remember { mutableStateOf(false) }
             Box {
                 Pill("★ $n", fx.preset == n, onLong = { menu = true }) { vm.applyUserScene(n, st) }
-                SudoMenu(menu, { menu = false }) { SudoMenuItem("Delete scene") { vm.deleteScene(n); menu = false } }
+                if (menu) SudoSheet({ menu = false }, title = n) { close -> SheetAction(I.Delete, "Delete scene", danger = true) { vm.deleteScene(n); close() } }
             }
         }
         Pill("+ Save current", false, onClick = onSave)

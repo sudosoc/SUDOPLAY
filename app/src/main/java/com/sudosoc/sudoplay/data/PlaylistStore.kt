@@ -42,6 +42,14 @@ class PlaylistStore(ctx: Context) {
         if (songId in it.songIds) it else it.copy(songIds = it.songIds + songId)
     }
 
+    /** Put a playlist's contents back exactly (used by Undo). */
+    fun setSongs(id: String, songIds: List<Long>) = update(id) { it.copy(songIds = songIds) }
+
+    /** Bring back a deleted playlist at its old position (used by Undo). */
+    fun restore(p: Playlist, index: Int) {
+        if (items.none { it.id == p.id }) { items.add(index.coerceIn(0, items.size), p); save() }
+    }
+
     fun removeSong(id: String, songId: Long) = update(id) { it.copy(songIds = it.songIds - songId) }
 
     fun isFav(songId: Long) = get(FAV_ID)?.songIds?.contains(songId) == true
@@ -72,6 +80,6 @@ class PlaylistStore(ctx: Context) {
         items.forEach { p ->
             arr.put(JSONObject().put("id", p.id).put("name", p.name).put("songs", JSONArray(p.songIds)))
         }
-        runCatching { file.writeText(arr.toString()) }
+        AsyncFile.write(file, arr.toString())
     }
 }

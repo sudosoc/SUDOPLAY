@@ -27,6 +27,16 @@ Android music player (Kotlin, Jetpack Compose, Media3) — local library, 10-ban
 - Cover editor: 18 built-in covers or any photo from the device, pan/zoom to position, per song or whole album
 - Sleep timer shows a live countdown on its button, +5 min while running
 
+## v0.17.0
+- **Multi-select**: touch and hold a song (or use *Select* in its menu) to tick several in any list; a bar offers Play, Playlist, Next, Queue, Favorite, Download and More (remove from playlist / delete from phone depending on the screen).
+- **One menu system**: song / playlist / online / sort / gesture menus are now bottom sheets in the theme (no popups cut off by the screen edge); every dialog shares one themed look; four dialogs that had their own colours were unified.
+- **Undo** for deleting a playlist and removing songs from a playlist.
+- **Replay cache** for streamed songs (size 0–2 GB, clear button), **streaming quality** (Auto / High / Data saver) and **Offline mode** (also automatic without internet; online-only songs are dimmed and skipped).
+- **Tags inside downloads**: title, artist, cover and lyrics are written into MP3 (ID3v2.3) and M4A (iTunes atoms) files; any file that cannot be handled or fails a playback check is restored untouched.
+- Playlist and library saves happen off the main thread, atomically.
+- Arabic: ~100 more strings; screen-reader names for icon buttons.
+- Fixed: duplicate "Player" section in Settings.
+
 ## Roadmap
 - v0.3.x: crossfade, ReplayGain, tag editor, lyrics for FLAC/M4A
 - v0.3: streaming without API keys — NewPipeExtractor (YouTube/SoundCloud), internet radio (radio-browser), direct URLs

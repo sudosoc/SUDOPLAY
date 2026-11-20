@@ -257,6 +257,15 @@ object Online {
         throw last ?: java.io.IOException("Radio directory unreachable")
     }
 
+    /** Highest audio bitrate (kbps) allowed for streaming right now; 0 = no limit. Set by the app from the quality setting and the network type. */
+    @Volatile var capKbps: () -> Int = { 0 }
+
+    /** Best stream under the cap: AAC/m4a first, then the highest bitrate that still fits; if nothing fits, the smallest one. */
+    internal fun pickAudio(audio: List<org.schabi.newpipe.extractor.stream.AudioStream>, cap: Int): org.schabi.newpipe.extractor.stream.AudioStream? {
+        val fits = if (cap > 0) audio.filter { it.averageBitrate in 1..cap }.ifEmpty { listOfNotNull(audio.filter { it.averageBitrate > 0 }.minByOrNull { it.averageBitrate }) }.ifEmpty { audio } else audio
+        return fits.sortedWith(compareByDescending<org.schabi.newpipe.extractor.stream.AudioStream> { it.format?.suffix == "m4a" }.thenByDescending { it.averageBitrate }).firstOrNull()
+    }
+
     // ---------------- turning an item into something the player can play ----------------
     suspend fun resolve(item: OnlineItem): Song = withContext(Dispatchers.IO) {
         val id = idFor(item.url)
@@ -268,7 +277,7 @@ object Online {
                 val info = StreamInfo.getInfo(item.url)
                 val audio = info.audioStreams.filter { it.isUrl && !it.content.isNullOrBlank() }
                 // prefer AAC/m4a (plays everywhere), then the highest bitrate
-                val best = audio.sortedWith(compareByDescending<org.schabi.newpipe.extractor.stream.AudioStream> { it.format?.suffix == "m4a" }.thenByDescending { it.averageBitrate }).firstOrNull()?.content
+                val best = pickAudio(audio, capKbps())?.content
                     // some YouTube responses only carry a small muxed (video+audio) file; the player ignores its video track
                     ?: info.videoStreams.filter { it.isUrl && !it.isVideoOnly && !it.content.isNullOrBlank() }.minByOrNull { it.height }?.content
                     ?: throw java.io.IOException("No playable stream found (the source may be blocking this network)")

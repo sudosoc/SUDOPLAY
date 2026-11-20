@@ -85,11 +85,9 @@ fun SongsTab(vm: PlayerViewModel) {
         SearchField(query) { query = it }
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             PillButton("Shuffle", I.Shuffle, filled = true) { vm.shufflePlay(list) }
-            Box {
-                PillButton(sortNames[sort], I.SwapVert) { sortMenu = true }
-                SudoMenu(sortMenu, { sortMenu = false }) {
-                    sortNames.forEachIndexed { i, n -> DropdownMenuItem(text = { Text(n) }, onClick = { vm.settings.songSort.set(i); sortMenu = false }) }
-                }
+            PillButton(sortNames[sort], I.SwapVert) { sortMenu = true }
+            if (sortMenu) SudoSheet({ sortMenu = false }, title = "Sort by") { close ->
+                sortNames.forEachIndexed { i, n -> SheetAction(I.SwapVert, n, selected = sort == i) { vm.settings.songSort.set(i); close() } }
             }
             Spacer(Modifier.weight(1f))
             Text("${list.size}", color = t.text.copy(alpha = 0.6f))
@@ -100,7 +98,7 @@ fun SongsTab(vm: PlayerViewModel) {
             else EmptyState("Nothing matches “$query”", "Clear search") { query = "" }
         }
         else LazyColumn(Modifier.fillMaxSize()) {
-            itemsIndexed(list, key = { _, s -> s.id }) { i, s -> SongRow(s, vm, onClick = { vm.play(list, i) }) }
+            itemsIndexed(list, key = { _, s -> s.id }) { i, s -> SongRow(s, vm, onClick = { vm.play(list, i) }, pool = list) }
         }
     }
 }
@@ -232,7 +230,6 @@ fun PlaylistsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
     var importing by remember { mutableStateOf(false) }
     var importMsg by remember { mutableStateOf<String?>(null) }
     var renaming by remember { mutableStateOf<com.sudosoc.sudoplay.data.Playlist?>(null) }
-    var deleting by remember { mutableStateOf<com.sudosoc.sudoplay.data.Playlist?>(null) }
     Column(Modifier.fillMaxSize()) {
         ScreenTitle("Playlists")
         Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -273,11 +270,16 @@ fun PlaylistsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
                         Text(p.name, color = t.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("${p.songIds.size} songs", color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
                     }
-                    if (p.id != FAV_ID) Box {
-                        IconButton({ menu = true }) { Icon(I.MoreVert, null, tint = t.text.copy(alpha = 0.7f)) }
-                        SudoMenu(menu, { menu = false }) {
-                            DropdownMenuItem(text = { Text("Rename") }, onClick = { renaming = p; menu = false })
-                            DropdownMenuItem(text = { Text("Delete") }, onClick = { deleting = p; menu = false })
+                    if (p.id != FAV_ID) IconButton({ menu = true }) { Icon(I.MoreVert, "Playlist options", tint = t.text.copy(alpha = 0.7f)) }
+                    if (menu) SudoSheet({ menu = false }, title = p.name, subtitle = "${p.songIds.size} songs") { close ->
+                        SheetAction(I.PlayArrow, "Play", enabled = p.songIds.isNotEmpty()) { close(); vm.playList(vm.playlistSongs(p.id), 0) }
+                        SheetAction(I.Shuffle, "Shuffle", enabled = p.songIds.isNotEmpty()) { close(); vm.playList(vm.playlistSongs(p.id), 0, true) }
+                        SheetAction(I.Edit, "Rename") { close(); renaming = p }
+                        SheetAction(I.Delete, "Delete", danger = true) {
+                            close()
+                            val idx = vm.store.items.indexOfFirst { it.id == p.id }; val snap = p
+                            vm.store.delete(p.id)
+                            vm.undo.show("Deleted “${p.name}”") { vm.store.restore(snap, idx) }
                         }
                     }
                 }
@@ -286,14 +288,6 @@ fun PlaylistsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
     }
     if (creating) NameDialog("New playlist", onDismiss = { creating = false }) { vm.store.create(it); creating = false }
     renaming?.let { p -> NameDialog("Rename playlist", onDismiss = { renaming = null }, confirm = "Save", initial = p.name) { vm.store.rename(p.id, it); renaming = null } }
-    deleting?.let { p ->
-        AlertDialog(
-            onDismissRequest = { deleting = null }, title = { Text("Delete “${p.name}”?") },
-            text = { Text("The playlist is removed. Your songs stay on your phone.") },
-            confirmButton = { TextButton({ vm.store.delete(p.id); deleting = null }) { Text("Delete") } },
-            dismissButton = { TextButton({ deleting = null }) { Text("Cancel") } },
-        )
-    }
     if (importing) ImportPlaylistDialog(vm, onDismiss = { importing = false }) { importMsg = it }
 }
 
@@ -344,39 +338,6 @@ fun NameDialog(title: String, onDismiss: () -> Unit, confirm: String = "Create",
     )
 }
 
-@Composable
-fun PlaylistPickerDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit) {
-    var creating by remember { mutableStateOf(false) }
-    if (creating) {
-        val ctx = androidx.compose.ui.platform.LocalContext.current
-        NameDialog("New playlist", onDismiss = { creating = false }) { n ->
-            val pl = vm.store.create(n); vm.addToPlaylist(pl.id, song)
-            android.widget.Toast.makeText(ctx, Tr.t("Added to “${pl.name}”"), android.widget.Toast.LENGTH_SHORT).show(); onDismiss()
-        }
-        return
-    }
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    AlertDialog(
-        onDismissRequest = onDismiss, title = { Text("Add to playlist") },
-        text = {
-            LazyColumn {
-                items(vm.store.items.toList(), key = { it.id }) { p ->
-                    val has = song.id in p.songIds
-                    Row(Modifier.fillMaxWidth().clickable {
-                        val (name, already) = vm.addToPlaylist(p.id, song)
-                        android.widget.Toast.makeText(ctx, Tr.t(if (already) "Already in “$name”" else "Added to “$name”"), android.widget.Toast.LENGTH_SHORT).show(); onDismiss()
-                    }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(p.name, Modifier.weight(1f))
-                        if (has) Icon(I.Check, null)
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton({ creating = true }) { Text("New playlist") } },
-        dismissButton = { TextButton(onDismiss) { Text("Close") } },
-    )
-}
-
 // ---------------- Detail (album / artist / playlist) ----------------
 @Composable
 fun DetailScreen(vm: PlayerViewModel, detail: Detail, onBack: () -> Unit) {
@@ -397,6 +358,7 @@ fun DetailScreen(vm: PlayerViewModel, detail: Detail, onBack: () -> Unit) {
             Text(title, color = t.text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         val isPl = detail is Detail.Pl
+        if (detail is Detail.Pl) SelectionActions(vm, listOf(SelAction("Remove from playlist", { I.PlaylistRemove }, danger = true) { removeFromPlaylist(vm, detail.id, it) }))
         val onlineCount = if (isPl) list.count { it.online } else 0
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PillButton("Play", I.PlayArrow, filled = true) { vm.playList(list, 0) }
@@ -412,10 +374,18 @@ fun DetailScreen(vm: PlayerViewModel, detail: Detail, onBack: () -> Unit) {
         if (list.isEmpty()) EmptyState(if (isPl) "Nothing here yet. Add songs from anywhere, or import a playlist." else "Nothing here yet")
         LazyColumn {
             itemsIndexed(list, key = { _, s -> s.id }) { i, s ->
-                SongRow(s, vm, onClick = { vm.playList(list, i) }, badge = isPl, extraMenu = if (detail is Detail.Pl) { dismiss ->
-                    DropdownMenuItem(text = { Text("Remove from playlist") }, onClick = { vm.store.removeSong(detail.id, s.id); dismiss() })
+                SongRow(s, vm, onClick = { vm.playList(list, i) }, badge = isPl, pool = list, extraMenu = if (detail is Detail.Pl) { close ->
+                    SheetAction(I.PlaylistRemove, "Remove from playlist", danger = true) { close(); removeFromPlaylist(vm, detail.id, listOf(s)) }
                 } else null)
             }
         }
     }
+}
+
+/** Removes songs from a playlist and offers to put them back. */
+fun removeFromPlaylist(vm: PlayerViewModel, pid: String, songs: List<Song>) {
+    val before = vm.store.get(pid)?.songIds ?: return
+    songs.forEach { vm.store.removeSong(pid, it.id) }
+    vm.sel.clear()
+    vm.undo.show(if (songs.size == 1) "Removed from playlist" else "Removed ${songs.size} songs") { vm.store.setSongs(pid, before) }
 }

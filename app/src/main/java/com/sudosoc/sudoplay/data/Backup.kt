@@ -21,6 +21,7 @@ object Backup {
             }
             p.put(k, o)
         }
+        AsyncFile.flush()
         val pl = File(ctx.filesDir, "playlists.json").takeIf { it.exists() }?.readText() ?: "[]"
         // online songs inside playlists travel too (the "downloaded as" map does not: file ids differ on another phone)
         val ol = runCatching { File(ctx.filesDir, "onlinelib.json").takeIf { it.exists() }?.readText()?.let { JSONObject(it).put("l", org.json.JSONArray()).toString() } }.getOrNull() ?: ""

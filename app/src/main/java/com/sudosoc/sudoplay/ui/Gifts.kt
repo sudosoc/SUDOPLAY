@@ -47,7 +47,7 @@ fun SongInfoDialog(vm: PlayerViewModel, song: Song, onClose: () -> Unit) {
     }
     val marks = vm.bookmarks[song.id].orEmpty()
     AlertDialog(
-        onDismissRequest = onClose, containerColor = t.bgTop,
+        onDismissRequest = onClose,
         confirmButton = { TextButton(onClose) { Text("Close", color = t.primary) } },
         title = { Text("Song info", color = t.text) },
         text = {

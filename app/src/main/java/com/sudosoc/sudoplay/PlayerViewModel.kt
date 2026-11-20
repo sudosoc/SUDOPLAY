@@ -169,6 +169,17 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun appContext() = ctx
     // ---- online (YouTube / SoundCloud / radio / links) ----
     init {
+        // streaming quality: "Auto" streams the best on Wi-Fi and a lighter file on mobile data; "Data saver" always a small one
+        com.sudosoc.sudoplay.online.Online.capKbps = {
+            when (settings.streamQuality.value) {
+                1 -> 0
+                2 -> 70
+                else -> if ((ctx.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager).isActiveNetworkMetered) 128 else 0
+            }
+        }
+    }
+
+    init {
         com.sudosoc.sudoplay.online.DownloadCenter.alreadySaved = { item, extra -> localMatch(item, extra)?.id }
         com.sudosoc.sudoplay.online.DownloadCenter.onAlreadyHave = { _, _, localId, playlistId -> playlistId?.let { store.addSong(it, localId) } }
         com.sudosoc.sudoplay.online.Online.attach(ctx)
@@ -283,8 +294,18 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private var mixJob: Job? = null
     /** Play a list that may contain online songs: the first one starts as soon as it resolves, the rest are queued behind it in order. */
+    /** True when the user turned Offline mode on, or the phone simply has no internet: online-only songs cannot play. */
+    val offline: Boolean get() = settings.offlineMode.value || !com.sudosoc.sudoplay.data.NetState.online
+
     fun playList(list: List<Song>, index: Int, shuffleOn: Boolean = false) {
         if (list.isEmpty()) return
+        if (offline && list.any { it.online }) {
+            val playable = list.filter { !it.online }
+            if (playable.isEmpty()) { android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Nothing here is available offline"), android.widget.Toast.LENGTH_SHORT).show(); return }
+            val cur = list.getOrNull(index)
+            playList(playable, playable.indexOfFirst { it.id == cur?.id }.coerceAtLeast(0), shuffleOn)
+            return
+        }
         if (list.none { it.online }) { play(list, index, if (shuffleOn) true else null); return }
         val at = index.coerceIn(0, list.lastIndex)
         val order = if (shuffleOn) list.shuffled() else list.drop(at) + list.take(at)
@@ -356,6 +377,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (!settings.dlExtras.value) return
         val id = job.songId
         viewModelScope.launch(Dispatchers.IO) {
+            var coverJpeg: ByteArray? = null
             runCatching {
                 job.thumb?.let { u ->
                     com.sudosoc.sudoplay.online.Online.fetchBytes(u)?.let { b ->
@@ -363,6 +385,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                             val side = minOf(bmp.width, bmp.height)
                             val sq = if (bmp.width == bmp.height) bmp else android.graphics.Bitmap.createBitmap(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side)
                             CoverStore.saveForId(ctx, id, sq)
+                            coverJpeg = java.io.ByteArrayOutputStream().also { o -> sq.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, o) }.toByteArray()
                         }
                     }
                 }
@@ -373,6 +396,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 if (artist.isBlank()) Regex("""\s[-–—]\s""").find(title)?.let { m -> artist = title.substring(0, m.range.first).trim(); title = title.substring(m.range.last + 1) }
                 val tmp = Song(id, lyricTitle(title, artist), artist, "", 0, job.durSec * 1000, android.net.Uri.EMPTY, 0, 0)
                 LyricsFetcher.fetch(ctx, tmp)
+            }
+            // finally put the name, cover and lyrics inside the file itself, so they travel with it
+            runCatching {
+                if (id > 0) {
+                    val uri = android.content.ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
+                    com.sudosoc.sudoplay.data.TagWriter.write(ctx, uri, null, com.sudosoc.sudoplay.data.Tags(job.title, job.artist, cover = coverJpeg, lyrics = LyricsFetcher.raw(ctx, id)))
+                }
             }
         }
     }
@@ -562,6 +592,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             when (mode) { 0 -> play(listOf(loc), 0); 1 -> playNext(loc); else -> addToQueue(loc) }
             return
         }
+        if (offline) { onlineError = "You're offline — only songs saved on this phone can play"; return }
         onlineBusy = item.url; onlineError = null; onlineNote = null
         viewModelScope.launch {
             try {
@@ -988,9 +1019,19 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         FxScenes.saveUser(prefs, userScenes)
     }
 
+    /** Same song + same quality = same key, even though the signed link changes every time it is resolved. */
+    private fun streamCacheKey(s: Song): String {
+        val u = s.uri
+        val yt = u.host?.contains("googlevideo") == true
+        return if (yt) "yt-${u.getQueryParameter("id") ?: s.id}-${u.getQueryParameter("itag") ?: ""}-${u.getQueryParameter("clen") ?: ""}"
+        else "sp-${s.id}-${(u.host + u.path).hashCode()}"
+    }
+
     private fun toItem(s: Song): MediaItem = MediaItem.Builder()
         .setMediaId(s.id.toString())
         .setUri(s.uri)
+        // streamed songs with a known length (not radio, not playlists) get a stable key so replays come from the cache
+        .apply { if (s.online && s.durationMs > 0 && s.uri.scheme?.startsWith("http") == true && !s.uri.toString().contains(".m3u8")) setCustomCacheKey(streamCacheKey(s)) }
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(s.title).setArtist(s.artist).setAlbumTitle(s.album)
@@ -1046,6 +1087,42 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (song.online && olib.get(song.id) != null) { viewModelScope.launch { materialize(song)?.let { addToQueue(it) } }; return }
         val c = controller ?: return
         if (c.mediaItemCount == 0) play(listOf(song), 0) else c.addMediaItem(toItem(song))
+    }
+
+    // ---- several songs at once (multi-select) ----
+    val sel = com.sudosoc.sudoplay.ui.SelectionState()
+    val undo = com.sudosoc.sudoplay.ui.UndoState()
+
+    private suspend fun resolvedForQueue(s: Song): Song? = if (s.online && olib.get(s.id) != null) materialize(s) else s
+
+    /** Insert [list] right after the current song, keeping the order shown on screen. */
+    fun playNextAll(list: List<Song>) {
+        viewModelScope.launch {
+            var k = 0
+            for (s in list) {
+                val r = resolvedForQueue(s) ?: continue
+                val c = controller ?: return@launch
+                if (c.mediaItemCount == 0) { play(listOf(r), 0); k = 1 }
+                else { c.addMediaItem((c.currentMediaItemIndex + 1 + k).coerceAtMost(c.mediaItemCount), toItem(r)); k++ }
+            }
+        }
+    }
+
+    fun addToQueueAll(list: List<Song>) {
+        viewModelScope.launch {
+            for (s in list) {
+                val r = resolvedForQueue(s) ?: continue
+                val c = controller ?: return@launch
+                if (c.mediaItemCount == 0) play(listOf(r), 0) else c.addMediaItem(toItem(r))
+            }
+        }
+    }
+
+    /** Returns how many were newly added. */
+    fun favoriteAll(list: List<Song>): Int {
+        var n = 0
+        list.forEach { s -> if (!store.isFav(s.id)) { store.addSong(com.sudosoc.sudoplay.data.FAV_ID, s.id); n++ } }
+        return n
     }
 
     fun removeFromQueue(index: Int) { controller?.removeMediaItem(index) }

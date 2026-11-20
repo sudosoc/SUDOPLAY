@@ -116,7 +116,7 @@ class PlaybackService : MediaSessionService() {
         }
         val player = ExoPlayer.Builder(this, renderers)
             // streams survive a Wi-Fi ⇄ mobile-data switch: retry a failed load up to 8 times with growing pauses (default is 3)
-            .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(this)
+            .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(StreamCache.factory(this) { getSharedPreferences("sudoplay", MODE_PRIVATE).getInt("stream_cache_mb", 512) })
                 .setLoadErrorHandlingPolicy(androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy(8)))
             .setAudioAttributes(
                 AudioAttributes.Builder()

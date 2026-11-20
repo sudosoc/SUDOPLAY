@@ -157,17 +157,27 @@ fun artistLabel(a: String) = if (a.isBlank() || a.equals("<unknown>", true)) "Un
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun SongRow(song: Song, vm: PlayerViewModel, onClick: () -> Unit, badge: Boolean = false, extraMenu: (@Composable (dismiss: () -> Unit) -> Unit)? = null) {
+fun SongRow(
+    song: Song, vm: PlayerViewModel, onClick: () -> Unit, badge: Boolean = false,
+    pool: List<Song>? = null, extraMenu: (@Composable ColumnScope.(close: () -> Unit) -> Unit)? = null,
+) {
     val t = LocalSudo.current
     val isCur = vm.current?.id == song.id
     var menu by remember { mutableStateOf(false) }
-    val ctx = LocalContext.current
+    val selecting = vm.sel.active
+    val picked = vm.sel.has(song.id)
+    val unavailable = song.online && vm.offline
     Row(
-        Modifier.fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = { vm.haptics.click(); menu = true })
+        Modifier.fillMaxWidth().graphicsLayer { alpha = if (unavailable) 0.4f else 1f }
+            .background(if (picked) t.primary.copy(alpha = 0.14f) else androidx.compose.ui.graphics.Color.Transparent)
+            .combinedClickable(
+                onClick = { if (selecting) { vm.haptics.tick(); vm.sel.toggle(song, pool) } else onClick() },
+                onLongClick = { vm.haptics.click(); vm.sel.toggle(song, pool) },
+            )
             .padding(horizontal = 16.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (selecting) { SelectDot(picked); Spacer(Modifier.width(12.dp)) }
         Artwork(song, Modifier.size(50.dp), 128, 12.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -184,32 +194,13 @@ fun SongRow(song: Song, vm: PlayerViewModel, onClick: () -> Unit, badge: Boolean
                 )
             }
         }
-        if (vm.store.isFav(song.id)) Icon(I.Favorite, "favorite", tint = t.primary.copy(alpha = 0.8f), modifier = Modifier.padding(end = 4.dp).size(16.dp))
-        if (isCur && vm.isPlaying) Icon(I.Equalizer, null, tint = t.primary, modifier = Modifier.padding(end = 4.dp))
-        Box {
-            IconButton(onClick = { menu = true }) { Icon(I.MoreVert, null, tint = t.text.copy(alpha = 0.7f)) }
-            SudoMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Play next") }, onClick = { vm.playNext(song); menu = false; android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Plays next"), android.widget.Toast.LENGTH_SHORT).show() })
-                DropdownMenuItem(text = { Text("Add to queue") }, onClick = { vm.addToQueue(song); menu = false; android.widget.Toast.makeText(ctx, com.sudosoc.sudoplay.ui.Tr.t("Added to queue"), android.widget.Toast.LENGTH_SHORT).show() })
-                if (song.online) DropdownMenuItem(text = { Text("Download") }, onClick = { vm.downloadSongs(listOf(song)); menu = false })
-                DropdownMenuItem(
-                    text = { Text(if (vm.store.isFav(song.id)) "Remove from favorites" else "Add to favorites") },
-                    onClick = {
-                        val was = vm.store.isFav(song.id); vm.store.toggleFav(song.id); menu = false
-                        android.widget.Toast.makeText(ctx, Tr.t(if (was) "Removed from favorites" else "Added to favorites"), android.widget.Toast.LENGTH_SHORT).show()
-                    },
-                )
-                DropdownMenuItem(text = { Text("Add to playlist…") }, onClick = { vm.playlistTarget = song; menu = false })
-                if (!song.online) {
-                    DropdownMenuItem(text = { Text("Share") }, onClick = { shareSong(ctx, song); menu = false })
-                    DropdownMenuItem(text = { Text("Song info") }, onClick = { vm.infoSong = song; menu = false })
-                    DropdownMenuItem(text = { Text("Make video clip") }, onClick = { vm.clipSong = song; menu = false })
-                    DropdownMenuItem(text = { Text("Find online") }, onClick = { vm.findOnline(song); menu = false })
-                }
-                extraMenu?.invoke { menu = false }
-            }
+        if (!selecting) {
+            if (vm.store.isFav(song.id)) Icon(I.Favorite, "favorite", tint = t.primary.copy(alpha = 0.8f), modifier = Modifier.padding(end = 4.dp).size(16.dp))
+            if (isCur && vm.isPlaying) Icon(I.Equalizer, null, tint = t.primary, modifier = Modifier.padding(end = 4.dp))
+            IconButton(onClick = { menu = true }) { Icon(I.MoreVert, "More options", tint = t.text.copy(alpha = 0.7f)) }
         }
     }
+    if (menu) SongSheet(vm, song, onSelect = { vm.sel.toggle(song, pool) }, onDismiss = { menu = false }, extra = extraMenu)
 }
 
 /** Just an icon: a phone = the file is on this phone, a cloud = it plays from the internet. */

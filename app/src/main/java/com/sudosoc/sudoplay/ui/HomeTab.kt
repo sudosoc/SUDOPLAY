@@ -133,13 +133,8 @@ private fun HomeCard(song: Song, vm: PlayerViewModel, current: Boolean, onClick:
         Spacer(Modifier.height(6.dp))
         Text(song.title, color = if (current) t.primary else t.text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(artistLabel(song.artist), color = t.text.copy(alpha = 0.6f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        SudoMenu(menu, { menu = false }) {
-            DropdownMenuItem(text = { Text("Play next") }, onClick = { vm.playNext(song); menu = false; android.widget.Toast.makeText(ctx, Tr.t("Plays next"), android.widget.Toast.LENGTH_SHORT).show() })
-            DropdownMenuItem(text = { Text("Add to queue") }, onClick = { vm.addToQueue(song); menu = false; android.widget.Toast.makeText(ctx, Tr.t("Added to queue"), android.widget.Toast.LENGTH_SHORT).show() })
-            DropdownMenuItem(text = { Text(if (vm.store.isFav(song.id)) "Remove from favorites" else "Add to favorites") }, onClick = { vm.store.toggleFav(song.id); menu = false })
-            DropdownMenuItem(text = { Text("Add to playlist…") }, onClick = { vm.playlistTarget = song; menu = false })
-        }
     }
+    if (menu) SongSheet(vm, song, onSelect = { vm.sel.toggle(song) }, onDismiss = { menu = false })
 }
 
 @Composable

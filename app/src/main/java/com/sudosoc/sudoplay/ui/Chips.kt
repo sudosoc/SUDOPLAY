@@ -171,7 +171,7 @@ fun ValueChip(
                 style = TextStyle(fontFeatureSettings = "tnum"), maxLines = 1,
             )
         }
-        SudoMenu(menu, { menu = false }) { menuContent { menu = false } }
+        if (menu) SudoSheet({ menu = false }) { close -> menuContent(close) }
         dragIdx?.let { i ->
             Popup(popupPositionProvider = AboveAnchor(), properties = PopupProperties(focusable = false)) {
                 DragDial(steps[i], i / max(1f, steps.size - 1f))

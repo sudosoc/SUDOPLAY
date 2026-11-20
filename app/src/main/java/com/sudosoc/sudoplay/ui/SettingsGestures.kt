@@ -54,14 +54,12 @@ import com.sudosoc.sudoplay.data.CoverStore
 internal fun ActionPicker(title: String, sub: String?, current: String, onPick: (String) -> Unit) {
     val t = LocalSudo.current
     var open by remember { mutableStateOf(false) }
-    Box {
-        RowCard(onClick = { open = true }) {
-            TitleSub(title, sub, Modifier.weight(1f))
-            Text(GestureActions.label(current), color = t.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
-        }
-        SudoMenu(open, { open = false }) {
-            GestureActions.all.forEach { (id, label) -> SudoMenuItem(label, selected = id == current) { onPick(id); open = false } }
-        }
+    RowCard(onClick = { open = true }) {
+        TitleSub(title, sub, Modifier.weight(1f))
+        Text(GestureActions.label(current), color = t.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+    }
+    if (open) SudoSheet({ open = false }, title = title, subtitle = sub) { close ->
+        GestureActions.all.forEach { (id, label) -> SudoMenuItem(label, selected = id == current) { onPick(id); close() } }
     }
 }
 

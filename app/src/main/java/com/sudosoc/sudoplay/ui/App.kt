@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -91,6 +90,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
         var tab by rememberSaveable { mutableIntStateOf(vm.settings.lastTab.value.takeIf { it >= 0 } ?: if (vm.settings.navHome.value) 7 else 0) }
         LaunchedEffect(tab) { vm.settings.lastTab.set(tab) }
         var detail by remember { mutableStateOf<Detail?>(null) }
+        LaunchedEffect(tab, detail) { vm.sel.clear() }
         LaunchedEffect(vm.wantTab) { vm.wantTab?.let { w -> if (w == 5) vm.settings.navOnline.set(true); if (w == 6) vm.settings.navDownloads.set(true); tab = w; detail = null; vm.wantTab = null } }
         val scope = rememberCoroutineScope()
         val sheet = remember { SheetState(scope) }
@@ -116,7 +116,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                     NavBar(tabs, cur, vertical = pos == "left" || pos == "right") { tab = it; detail = null; vm.closePreview(); vm.haptics.tick() }
                 }
                 val body: @Composable ColumnScope.() -> Unit = {
-                    if (!com.sudosoc.sudoplay.data.NetState.online) OfflineBanner()
+                    if (vm.offline) OfflineBanner()
                     Box(Modifier.weight(1f)) {
                         val shown = if (!granted) -2 else if (vm.preview != null) -3 else if (detail != null) -1 else cur
                         androidx.compose.animation.Crossfade(shown, animationSpec = androidx.compose.animation.core.tween(160), label = "tab") { key ->
@@ -135,6 +135,8 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                             }
                         }
                     }
+                    UndoHost(vm.undo)
+                    SelectionBar(vm)
                     if (vm.current != null) MiniPlayer(vm, sheet)
                 }
                 when (pos) {
@@ -149,6 +151,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                 // Later-registered BackHandlers win, so Now Playing is declared last.
                 BackHandler(enabled = detail != null) { detail = null }
                 BackHandler(enabled = vm.preview != null) { vm.closePreview() }
+                BackHandler(enabled = vm.sel.active) { vm.sel.clear() }
 
                 if (sheet.isOpen) {
                     Box(Modifier.fillMaxSize().graphicsLayer { alpha = sheet.frac * 0.55f }.background(Color.Black))
@@ -168,7 +171,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
                 vm.infoSong?.let { SongInfoDialog(vm, it) { vm.infoSong = null } }
                 vm.clipSong?.let { ClipScreen(vm, it) { vm.clipSong = null } }
             }
-            vm.playlistTarget?.let { PlaylistPickerDialog(vm, it) { vm.playlistTarget = null } }
+            vm.playlistTarget?.let { PlaylistPickerSheet(vm, listOf(it)) { vm.playlistTarget = null } }
         }
     }
     }
