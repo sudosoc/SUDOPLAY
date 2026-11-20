@@ -169,10 +169,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun appContext() = ctx
     // ---- online (YouTube / SoundCloud / radio / links) ----
     init {
-        com.sudosoc.sudoplay.online.DownloadCenter.alreadySaved = { item, extra ->
-            val ids = listOfNotNull(extra, if (item.url.isNotBlank()) com.sudosoc.sudoplay.online.Online.idFor(item.url) else null)
-            ids.any { id -> olib.localFor(id)?.let { l -> byId.containsKey(l) } == true }
-        }
+        com.sudosoc.sudoplay.online.DownloadCenter.alreadySaved = { item, extra -> localMatch(item, extra)?.id }
+        com.sudosoc.sudoplay.online.DownloadCenter.onAlreadyHave = { _, _, localId, playlistId -> playlistId?.let { store.addSong(it, localId) } }
         com.sudosoc.sudoplay.online.Online.attach(ctx)
         store.onAdd = { sid -> rememberOnline(sid) }
         com.sudosoc.sudoplay.online.DownloadCenter.attach(ctx) { job ->
@@ -180,6 +178,44 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             if (job.songId > 0) { job.origIds.forEach { olib.mapLocal(it, job.songId) }; saveExtras(job) }
             refreshLibrary()
         }
+        com.sudosoc.sudoplay.online.DownloadCenter.restore()   // unfinished downloads from last time carry on
+    }
+
+    // ---- "is this song already on the phone?" — same file, or the same title + artist (+ length) in the library ----
+    private var matchSrc: List<Song>? = null
+    private val matchIdx = HashMap<String, MutableList<Song>>()
+    private fun normTitle(s: String) = com.sudosoc.sudoplay.online.TitleKey.of(s)
+    fun localMatch(item: com.sudosoc.sudoplay.online.OnlineItem, extra: Long? = null): Song? {
+        listOfNotNull(extra, item.url.takeIf { it.isNotBlank() }?.let { com.sudosoc.sudoplay.online.Online.idFor(it) }).forEach { id ->
+            olib.localFor(id)?.let { l -> byId[l] }?.let { return it }
+        }
+        if (rawSongs !== matchSrc) {
+            matchIdx.clear(); rawSongs.forEach { matchIdx.getOrPut(normTitle(it.title)) { ArrayList() }.add(it) }; matchSrc = rawSongs
+        }
+        val artist = lyricArtist(item.subtitle.substringBefore(" • "))
+        val key = normTitle(lyricTitle(item.title, artist))
+        if (key.length < 3) return null
+        val at = com.sudosoc.sudoplay.online.OnlineMatch.tokens(artist)
+        val dur = item.durationSec
+        val hit = matchIdx[key]?.firstOrNull { c ->
+            val ca = com.sudosoc.sudoplay.online.OnlineMatch.tokens(c.artist)
+            val artistOk = at.isEmpty() || c.artist.isBlank() || c.artist.equals("<unknown>", true) || ca.any { it in at }
+            val durOk = dur <= 0 || c.durationMs <= 0 || kotlin.math.abs(c.durationMs / 1000 - dur) <= 6
+            artistOk && durOk
+        } ?: return null
+        // remember the link, so rows show "on this phone" and it keeps working even if the library is rescanned
+        if (item.url.isNotBlank()) olib.mapLocal(com.sudosoc.sudoplay.online.Online.idFor(item.url), hit.id)
+        if (extra != null && extra < 0) olib.mapLocal(extra, hit.id)
+        return hit
+    }
+
+    /** Add to a playlist; an online song that is already on the phone is added as the phone's file. Returns (playlist name, was already in it). */
+    fun addToPlaylist(pid: String, song: Song): Pair<String, Boolean> {
+        val p = store.get(pid) ?: return "" to false
+        val id = if (song.online) localMatch(itemOf(song), song.id)?.id ?: song.id else song.id
+        val already = id in p.songIds || song.id in p.songIds
+        if (!already) store.addSong(pid, id)
+        return p.name to already
     }
 
     // ---- online songs inside playlists ----
@@ -522,7 +558,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun playOnline(item: com.sudosoc.sudoplay.online.OnlineItem, mode: Int = 0, fallbackTried: Boolean = false) {
         if (onlineBusy != null) return
         // already downloaded? play the file on the phone
-        olib.localFor(com.sudosoc.sudoplay.online.Online.idFor(item.url))?.let { l -> byId[l] }?.let { loc ->
+        localMatch(item)?.let { loc ->
             when (mode) { 0 -> play(listOf(loc), 0); 1 -> playNext(loc); else -> addToQueue(loc) }
             return
         }
@@ -695,6 +731,15 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** A song that cannot be played does not stop the music: jump to the next one in the queue and say so. */
+    private fun skipBroken(): Boolean {
+        val c = controller ?: return false
+        if (!c.hasNextMediaItem()) return false
+        c.seekToNextMediaItem(); c.prepare(); c.play()
+        onlineNote = "Skipped — couldn't play that song"
+        return true
+    }
+
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = sync()
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -707,10 +752,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     viewModelScope.launch {
                         val alt = com.sudosoc.sudoplay.online.Online.alternative(origin)
                         if (alt != null) { onlineNote = "YouTube refused the stream — playing the ${alt.kind.label} version"; playOnline(alt, 0, true) }
-                        else onlineError = "YouTube refused this stream (HTTP ${http403 ?: "error"}) and no other source has it."
+                        else if (!skipBroken()) onlineError = "YouTube refused this stream (HTTP ${http403 ?: "error"}) and no other source has it."
                     }
                     return
                 }
+                if (skipBroken()) return
                 onlineError = when {
                     http403 == 403 || http403 == 410 -> "The source refused this stream (HTTP $http403). YouTube does this often — try SoundCloud or radio, or search again later."
                     else -> "Playback failed: ${error.errorCodeName}"

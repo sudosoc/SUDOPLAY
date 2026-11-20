@@ -115,6 +115,9 @@ class PlaybackService : MediaSessionService() {
                     .build()
         }
         val player = ExoPlayer.Builder(this, renderers)
+            // streams survive a Wi-Fi ⇄ mobile-data switch: retry a failed load up to 8 times with growing pauses (default is 3)
+            .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(this)
+                .setLoadErrorHandlingPolicy(androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy(8)))
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)

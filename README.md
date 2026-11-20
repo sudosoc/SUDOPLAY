@@ -155,3 +155,10 @@ New **Online** tab (can be hidden from Appearance → Navigation bar):
 - Downloads: Cancel all, storage used. Home: Resume button, long-press a cover for a menu. Favorites toast, Rescan button when the library is empty, confirm before clearing history, loading spinner on the mini player, accessibility labels.
 - NewPipeExtractor 0.26.0 → 0.26.5.
 - Code: Settings and Now Playing screens split into smaller files.
+
+## v0.16.0 — downloads that behave
+- **No more duplicates:** a song already on the phone (same file, or same title + artist + length in the library) is not downloaded again. Choosing a playlist adds the existing song to it instead. Adding an online song to a playlist uses the phone's copy when there is one, and says "Already in …" if it was there.
+- **Plays from the phone first:** opening a song from Discover / search / a playlist plays your local copy when you have one.
+- **Switching mobile data ⇄ Wi-Fi no longer kills a download:** it resumes from the byte it reached (or restarts with a fresh link if the old one expired), and waits — "Waiting for Wi-Fi / network" — instead of failing. Streams retry up to 8 times.
+- **Unfinished downloads survive closing the app** and restart on the next launch.
+- A song that can't play is skipped to the next one, with a message.

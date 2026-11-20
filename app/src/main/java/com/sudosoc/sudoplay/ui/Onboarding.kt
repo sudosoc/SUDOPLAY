@@ -93,8 +93,8 @@ private fun M3Chip(label: String, on: Boolean, onClick: () -> Unit) {
 /** Shown once after an update. */
 @Composable
 fun WhatsNew(version: String, onClose: () -> Unit) {
-    val en = listOf("Home dashboard you can rearrange", "Arabic language and right-to-left layout", "Open Discover playlists without adding them", "No more duplicate downloads", "Search inside Settings", "Crash reports you can send me", "Newer YouTube extractor")
-    val ar = listOf("صفحة رئيسية بترتّبها زي ما تحب", "اللغة العربية وتخطيط من اليمين لليسار", "افتح قوائم اكتشف من غير ما تتضاف", "مفيش تحميل مكرر تاني", "بحث جوه الإعدادات", "تقارير أعطال تقدر تبعتهالي", "مكتبة يوتيوب أحدث")
+    val en = listOf("A song already on your phone is never downloaded again — it's added to the playlist instead", "Downloads continue when you switch between mobile data and Wi-Fi, and wait for Wi-Fi if you chose Wi-Fi only", "Unfinished downloads carry on after the app is closed", "Songs you already have play from the phone, even when opened from Discover or search", "A song that can't play is skipped automatically", "Streams retry through network changes")
+    val ar = listOf("الأغنية الموجودة على موبايلك ما بتتحملش تاني — بتتضاف للقائمة بدل كده", "التحميل بيكمّل لما تغيّر من داتا لواي فاي، وبيستنى الواي فاي لو اخترت كده", "التحميلات اللي ما خلصتش بتكمّل بعد ما تقفل التطبيق", "الأغاني اللي عندك بتشتغل من الموبايل حتى لو فتحتها من اكتشف أو البحث", "الأغنية اللي مش بتشتغل بيتخطاها تلقائيًا", "البث بيحاول تاني لما الشبكة تتغيّر")
     AlertDialog(
         onDismissRequest = onClose, title = { Text(if (Tr.ar) "الجديد في $version" else "What's new in $version") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { (if (Tr.ar) ar else en).forEach { Text("• $it") } } },

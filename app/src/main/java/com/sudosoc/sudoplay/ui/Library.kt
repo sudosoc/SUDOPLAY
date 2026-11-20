@@ -348,16 +348,24 @@ fun NameDialog(title: String, onDismiss: () -> Unit, confirm: String = "Create",
 fun PlaylistPickerDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit) {
     var creating by remember { mutableStateOf(false) }
     if (creating) {
-        NameDialog("New playlist", onDismiss = { creating = false }) { n -> vm.store.addSong(vm.store.create(n).id, song.id); onDismiss() }
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        NameDialog("New playlist", onDismiss = { creating = false }) { n ->
+            val pl = vm.store.create(n); vm.addToPlaylist(pl.id, song)
+            android.widget.Toast.makeText(ctx, Tr.t("Added to “${pl.name}”"), android.widget.Toast.LENGTH_SHORT).show(); onDismiss()
+        }
         return
     }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss, title = { Text("Add to playlist") },
         text = {
             LazyColumn {
                 items(vm.store.items.toList(), key = { it.id }) { p ->
                     val has = song.id in p.songIds
-                    Row(Modifier.fillMaxWidth().clickable { vm.store.addSong(p.id, song.id); onDismiss() }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().clickable {
+                        val (name, already) = vm.addToPlaylist(p.id, song)
+                        android.widget.Toast.makeText(ctx, Tr.t(if (already) "Already in “$name”" else "Added to “$name”"), android.widget.Toast.LENGTH_SHORT).show(); onDismiss()
+                    }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(p.name, Modifier.weight(1f))
                         if (has) Icon(I.Check, null)
                     }

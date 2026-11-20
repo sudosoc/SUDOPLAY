@@ -2,6 +2,11 @@ package com.sudosoc.sudoplay.ui
 
 // Generated dictionary: English UI text -> Arabic. Unknown text stays English.
 internal val AR_WORDS: Map<String, String> = mapOf(
+    "Waiting for Wi-Fi" to "في انتظار الواي فاي",
+    "Waiting for network" to "في انتظار الشبكة",
+    "Already on your phone — added to the playlist" to "موجودة على موبايلك — اتضافت للقائمة",
+    "Playing from your phone" to "بتشتغل من موبايلك",
+    "Skipped — couldn't play that song" to "اتخطّت — مقدرتش أشغّلها",
     "Removed from favorites" to "اتشالت من المفضلة",
     "Added to favorites" to "اتضافت للمفضلة",
     "Clear play history?" to "تمسح سجل التشغيل؟",
@@ -348,6 +353,8 @@ internal val AR_WORDS: Map<String, String> = mapOf(
 )
 
 internal val AR_RULES: List<Pair<Regex, String>> = listOf(
+    Regex("^Added to “(.*)”\$") to "اتضافت لـ «\$1»",
+    Regex("^Already in “(.*)”\$") to "موجودة بالفعل في «\$1»",
     Regex("^(\\d+) songs on your phone\$") to "\$1 أغنية على موبايلك",
     Regex("^(\\d+) songs\$") to "\$1 أغنية",
     Regex("^(\\d+) selected\$") to "تم تحديد \$1",

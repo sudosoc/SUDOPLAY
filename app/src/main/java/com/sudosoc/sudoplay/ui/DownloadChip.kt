@@ -68,7 +68,7 @@ fun DownloadChip(vm: PlayerViewModel, modifier: Modifier = Modifier) {
                 else CircularProgressIndicator(progress = { job.progress }, modifier = Modifier.size(18.dp), color = t.primary, trackColor = t.primary.copy(alpha = 0.2f), strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    if (job.state == "Queued" || job.progress <= 0.01f) "Downloading…" else "Downloading ${(job.progress * 100).toInt()}%",
+                    if (job.state.startsWith("Waiting")) job.state else if (job.state == "Queued" || job.progress <= 0.01f) "Downloading…" else "Downloading ${(job.progress * 100).toInt()}%",
                     color = t.text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
                 )
                 Spacer(Modifier.width(8.dp))

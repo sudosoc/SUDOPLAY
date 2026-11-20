@@ -43,7 +43,11 @@ class DlJob(val id: Long, val title: String, val artist: String, val option: DlO
     var durSec: Long = 0
     var origIds: List<Long> = emptyList()
     internal var job: Job? = null
-    val active get() = state == "Queued" || state == "Downloading"
+    @Volatile var cancelled = false
+    /** The page the song came from (kept so a download can be re-resolved and restored after a restart). */
+    var srcUrl: String = ""
+    var srcKind: String = "Link"
+    val active get() = state == "Queued" || state == "Downloading" || state.startsWith("Waiting")
 }
 
 /**
@@ -62,11 +66,43 @@ object DownloadCenter {
 
     fun attach(c: Context, saved: (DlJob) -> Unit) { ctx = c.applicationContext; onSaved = saved }
 
+    // ---------- unfinished downloads survive the app being closed ----------
+    private fun persist() {
+        runCatching {
+            val a = org.json.JSONArray()
+            jobs.filter { it.active && it.srcUrl.isNotBlank() }.forEach { j ->
+                a.put(org.json.JSONObject().put("t", j.title).put("a", j.artist).put("u", j.srcUrl).put("k", j.srcKind).put("th", j.thumb ?: "")
+                    .put("d", j.durSec).put("p", j.playlistId ?: "").put("o", org.json.JSONArray(j.origIds)))
+            }
+            ctx.getSharedPreferences("sudoplay", Context.MODE_PRIVATE).edit().putString("dl_queue", a.toString()).apply()
+        }
+    }
+    /** Called once at start: picks up what was still downloading when the app was closed. */
+    fun restore() {
+        val raw = ctx.getSharedPreferences("sudoplay", Context.MODE_PRIVATE).getString("dl_queue", null) ?: return
+        ctx.getSharedPreferences("sudoplay", Context.MODE_PRIVATE).edit().remove("dl_queue").apply()
+        scope.launch {
+            kotlinx.coroutines.delay(4000)   // let the library load first, so files that are already on the phone are recognised
+            runCatching {
+                val a = org.json.JSONArray(raw)
+                for (i in 0 until a.length()) {
+                    val x = a.getJSONObject(i)
+                    val kind = runCatching { OnlineKind.valueOf(x.optString("k")) }.getOrDefault(OnlineKind.Link)
+                    val item = OnlineItem(kind, x.optString("t"), x.optString("a"), x.optString("th").ifBlank { null }, x.optLong("d"), x.optString("u"))
+                    val ids = x.optJSONArray("o"); val extra = ids?.let { if (it.length() > 0) it.optLong(0) else null }
+                    withContext(Dispatchers.Main) { downloadNow(listOf(item), x.optString("p").ifBlank { null }, listOf(extra)) }
+                }
+            }
+        }
+    }
+
     // ---------- never twice: a second tap while the first is still looking for a source (or already downloading) does nothing ----------
     /** Keys of songs whose download is being prepared right now (before it becomes a job). Compose state, so the player chip can show it at once. */
     val pending = androidx.compose.runtime.mutableStateListOf<String>()
-    /** Set by the app: is this song already saved on the phone? */
-    var alreadySaved: (OnlineItem, Long?) -> Boolean = { _, _ -> false }
+    /** Set by the app: the id of the copy of this song that is already on the phone (the same file, or a song with the same title and artist), or null. */
+    var alreadySaved: (OnlineItem, Long?) -> Long? = { _, _ -> null }
+    /** Set by the app: called for a song that was already there, so it can be linked and put in the chosen playlist instead of downloading it again. */
+    var onAlreadyHave: (OnlineItem, Long?, Long, String?) -> Unit = { _, _, _, _ -> }
     private fun norm(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
     fun keysOf(item: OnlineItem, extraId: Long? = null): Set<String> = buildSet {
         if (item.url.isNotBlank()) add("id:" + Online.idFor(item.url))
@@ -127,17 +163,21 @@ object DownloadCenter {
         if (blockedByWifiOnly()) return
         // drop what is already downloading / saved, so repeated taps cannot start the same file again
         val fresh = ArrayList<Triple<OnlineItem, Long?, Set<String>>>()
-        var busy = 0; var saved = 0
+        var busy = 0; var saved = 0; var addedToList = 0
         items.forEachIndexed { idx, it0 ->
             val extra = extraIds.getOrNull(idx)
             val keys = keysOf(it0, extra)
+            val have = alreadySaved(it0, extra)
             when {
-                alreadySaved(it0, extra) -> saved++
+                have != null -> { saved++; onAlreadyHave(it0, extra, have, playlistId); if (playlistId != null) addedToList++ }
                 isBusyWith(keys) -> busy++
                 else -> { pending.addAll(keys); fresh.add(Triple(it0, extra, keys)) }
             }
         }
-        if (fresh.isEmpty()) { toast(if (busy > 0) "Already downloading — see Downloads" else "Already on your phone"); return }
+        if (fresh.isEmpty()) {
+            toast(when { busy > 0 -> "Already downloading — see Downloads"; addedToList > 0 -> "Already on your phone — added to the playlist"; else -> "Already on your phone" })
+            return
+        }
         toast(if (fresh.size == 1) "Looking for the best source…" else "Starting ${fresh.size} downloads…" + if (busy + saved > 0) " (${busy + saved} skipped: already there)" else "")
         scope.launch {
             var ok = 0
@@ -177,10 +217,12 @@ object DownloadCenter {
         if (jobs.any { it.active && norm(it.title + it.artist) == norm(title + artist) }) { toast("Already downloading “${title.take(40)}”"); return }
         val job = DlJob(next++, title, artist, option, playlistId)
         if (item != null) {
+            job.srcUrl = item.url; job.srcKind = item.kind.name
             job.thumb = item.thumb; job.durSec = item.durationSec
             job.origIds = (listOf(Online.idFor(item.url)).filter { item.url.isNotBlank() } + extraIds).distinct()
         } else job.origIds = extraIds
         jobs.add(0, job)
+        persist()
         // the notification is a bonus: if the system refuses to start the service, the download itself still runs
         runCatching { ContextCompat.startForegroundService(ctx, Intent(ctx, DownloadService::class.java)) }
         job.job = scope.launch {
@@ -195,12 +237,12 @@ object DownloadCenter {
                     job.state = "Cancelled"
                 } catch (e: Throwable) {
                     job.state = "Failed"; job.error = com.sudosoc.sudoplay.online.Friendly.of(e)
-                }
+                } finally { persist() }
             }
         }
     }
 
-    fun cancel(j: DlJob) { j.job?.cancel(); if (j.active) j.state = "Cancelled" }
+    fun cancel(j: DlJob) { j.cancelled = true; j.job?.cancel(); if (j.active) j.state = "Cancelled"; persist() }
     fun clearFinished() { jobs.removeAll { !it.active } }
 
     // ---------- output file (MediaStore, so the library sees it) ----------
@@ -244,34 +286,109 @@ object DownloadCenter {
         if (ref.startsWith("http://") || ref.startsWith("https://")) ref
         else runCatching { java.net.URI(base).resolve(ref).toString() }.getOrElse { base.substringBeforeLast('/') + "/" + ref }
 
-    private fun get(url: String) = http.newCall(okhttp3.Request.Builder().url(url).header("User-Agent", UA).build()).execute()
+    /** Same client, but a dead connection (Wi-Fi ⇄ mobile data) is noticed within 20 s instead of hanging. */
+    private val dl by lazy { Online.http.newBuilder().readTimeout(20, TimeUnit.SECONDS).retryOnConnectionFailure(true).build() }
+    private fun req(url: String, from: Long = 0) = okhttp3.Request.Builder().url(url).header("User-Agent", UA).apply { if (from > 0) header("Range", "bytes=$from-") }.build()
+    private fun get(url: String) = dl.newCall(req(url)).execute()
     private fun log(url: String, code: Int, bytes: Long, ms: Long) {
         val u = Uri.parse(url)
         NetLog.add(NetEntry(System.currentTimeMillis(), "GET", u.host ?: "?", (u.path ?: "/").take(60), code, bytes, ms))
     }
 
-    private fun saveProgressive(j: DlJob): Uri {
-        val out = open(j)
-        try {
-            val t0 = System.currentTimeMillis()
-            get(j.option.url).use { r ->
-                if (!r.isSuccessful) throw java.io.IOException("HTTP ${r.code} — the source refused the download")
-                val body = r.body ?: throw java.io.IOException("Empty response")
-                val total = body.contentLength()
-                var done = 0L
-                out.stream.use { os ->
-                    body.byteStream().use { ins ->
-                        val buf = ByteArray(64 * 1024)
-                        while (true) {
-                            val n = ins.read(buf); if (n < 0) break
-                            os.write(buf, 0, n); done += n
-                            if (total > 0) j.progress = (done.toFloat() / total).coerceAtMost(0.99f)
-                            if (Thread.currentThread().isInterrupted || j.state == "Cancelled") throw kotlinx.coroutines.CancellationException()
-                        }
-                    }
+    private class Stale(val code: Int) : java.io.IOException("HTTP $code")
+
+    /** null = the connection is fine; otherwise why we are waiting. */
+    internal fun waitingFor(wifiOnly: Boolean, internet: Boolean, unmetered: Boolean): String? = when {
+        !internet -> "Waiting for network"
+        wifiOnly && !unmetered -> "Waiting for Wi-Fi"
+        else -> null
+    }
+    private fun netReady(): String? {
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val c = cm.getNetworkCapabilities(cm.activeNetwork)
+        val wifiOnly = ctx.getSharedPreferences("sudoplay", Context.MODE_PRIVATE).getBoolean("dl_wifi_only", false)
+        return waitingFor(wifiOnly, c?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true, c?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true)
+    }
+    private fun ensure(j: DlJob) { if (j.cancelled || Thread.currentThread().isInterrupted) throw kotlinx.coroutines.CancellationException() }
+    /** Pauses (without failing) until the connection is usable again — e.g. while the phone switches from mobile data to Wi-Fi. */
+    private fun awaitNet(j: DlJob) {
+        var why = netReady() ?: return
+        while (true) {
+            ensure(j); j.state = why
+            Thread.sleep(1000)
+            why = netReady() ?: break
+        }
+        j.state = "Downloading"
+    }
+
+    /** One small file (playlist / fragment) with retries and the same network waiting. */
+    private fun bytesRetry(j: DlJob, url: String): ByteArray {
+        var fails = 0
+        while (true) {
+            awaitNet(j); ensure(j)
+            try {
+                get(url).use { r ->
+                    if (!r.isSuccessful) throw java.io.IOException("HTTP ${r.code}")
+                    return r.body?.bytes() ?: ByteArray(0)
                 }
-                log(j.option.url, r.code, done, System.currentTimeMillis() - t0)
+            } catch (e: java.io.IOException) {
+                if (netReady() != null) continue
+                if (++fails > 5) throw e
+                Thread.sleep(800L * fails)
             }
+        }
+    }
+
+    /** Downloads straight to the file. If the connection drops it carries on from the byte it reached; if the link expires it starts again with a fresh one. */
+    private fun saveProgressive(j: DlJob): Uri {
+        var out = open(j)
+        var done = 0L; var total = -1L; var fails = 0; var restarts = 0
+        var url = j.option.url
+        try {
+            while (true) {
+                awaitNet(j); ensure(j)
+                val before = done
+                try {
+                    val t0 = System.currentTimeMillis()
+                    dl.newCall(req(url, done)).execute().use { r ->
+                        if (r.code == 416 && done > 0) return@use                      // nothing left to fetch: it was already complete
+                        if (r.code == 403 || r.code == 410 || r.code == 404) throw Stale(r.code)
+                        if (!r.isSuccessful) throw java.io.IOException("HTTP ${r.code} — the source refused the download")
+                        val body = r.body ?: throw java.io.IOException("Empty response")
+                        if (total < 0) total = if (r.code == 206) (r.header("Content-Range")?.substringAfterLast('/')?.toLongOrNull() ?: -1L) else body.contentLength()
+                        var skip = if (done > 0 && r.code == 200) done else 0L           // the server ignored "Range": skip what we already have
+                        val buf = ByteArray(64 * 1024)
+                        body.byteStream().use { ins ->
+                            while (true) {
+                                val n = ins.read(buf); if (n < 0) break
+                                var off = 0
+                                if (skip > 0) { val k = minOf(skip, n.toLong()).toInt(); skip -= k; off = k }
+                                if (n > off) { out.stream.write(buf, off, n - off); done += (n - off) }
+                                if (total > 0) j.progress = (done.toFloat() / total).coerceAtMost(0.99f)
+                                ensure(j)
+                            }
+                        }
+                        if (total > 0 && done < total) throw java.io.IOException("Connection closed early")
+                        log(url, r.code, done, System.currentTimeMillis() - t0)
+                    }
+                    break
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e
+                } catch (e: Stale) {
+                    // the link stopped working (often right after the network changed): fetch a fresh one and begin again
+                    if (j.srcUrl.isBlank() || ++restarts > 3) throw e
+                    val fresh = kotlinx.coroutines.runBlocking { best(OnlineItem(runCatching { OnlineKind.valueOf(j.srcKind) }.getOrDefault(OnlineKind.Link), j.title, j.artist, j.thumb, j.durSec, j.srcUrl)) }
+                        ?: throw e
+                    if (fresh.hls || fresh.ext != j.option.ext) throw e
+                    runCatching { out.stream.close() }; out.abort(); out = open(j); done = 0; total = -1; url = fresh.url
+                } catch (e: java.io.IOException) {
+                    ensure(j)
+                    if (netReady() != null) continue                                   // no connection right now → wait, don't count it as a failure
+                    fails = if (done > before) 1 else fails + 1
+                    if (fails > 6) throw e
+                    Thread.sleep(700L * fails)
+                }
+            }
+            runCatching { out.stream.close() }
             out.finish(); return out.uri
         } catch (t: Throwable) { runCatching { out.stream.close() }; out.abort(); throw t }
     }
@@ -279,11 +396,11 @@ object DownloadCenter {
     /** HLS (what SoundCloud serves): fetch the playlist, then every fragment in order — init segment + fragments make a normal .m4a. */
     private fun saveHls(j: DlJob): Uri {
         var base = j.option.url
-        var text = get(base).use { it.body?.string() ?: "" }
+        var text = String(bytesRetry(j, base))
         if (text.contains("#EXT-X-STREAM-INF")) {                     // master playlist → first variant
             val v = text.lines().first { it.isNotBlank() && !it.startsWith("#") }
             base = absUrl(base, v)
-            text = get(base).use { it.body?.string() ?: "" }
+            text = String(bytesRetry(j, base))
         }
         if (text.contains("#EXT-X-KEY") && !text.contains("METHOD=NONE")) throw java.io.IOException("This stream is encrypted and cannot be saved")
         val parts = ArrayList<String>()
@@ -295,12 +412,9 @@ object DownloadCenter {
             val t0 = System.currentTimeMillis(); var bytes = 0L
             out.stream.use { os ->
                 parts.forEachIndexed { i, u ->
-                    get(u).use { r ->
-                        if (!r.isSuccessful) throw java.io.IOException("HTTP ${r.code} on fragment ${i + 1}")
-                        val b = r.body?.bytes() ?: ByteArray(0); os.write(b); bytes += b.size
-                    }
+                    val b = bytesRetry(j, u); os.write(b); bytes += b.size
                     j.progress = ((i + 1f) / parts.size).coerceAtMost(0.99f)
-                    if (Thread.currentThread().isInterrupted || j.state == "Cancelled") throw kotlinx.coroutines.CancellationException()
+                    ensure(j)
                 }
             }
             log(j.option.url, 200, bytes, System.currentTimeMillis() - t0)
