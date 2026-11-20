@@ -90,7 +90,7 @@ fun SudoApp(vm: PlayerViewModel, granted: Boolean, onRequest: () -> Unit) {
         var tab by rememberSaveable { mutableIntStateOf(vm.settings.lastTab.value.takeIf { it >= 0 } ?: if (vm.settings.navHome.value) 7 else 0) }
         LaunchedEffect(tab) { vm.settings.lastTab.set(tab) }
         var detail by remember { mutableStateOf<Detail?>(null) }
-        LaunchedEffect(tab, detail) { vm.sel.clear() }
+        LaunchedEffect(tab, detail, vm.preview != null) { vm.sel.clear() }
         LaunchedEffect(vm.wantTab) { vm.wantTab?.let { w -> if (w == 5) vm.settings.navOnline.set(true); if (w == 6) vm.settings.navDownloads.set(true); tab = w; detail = null; vm.wantTab = null } }
         val scope = rememberCoroutineScope()
         val sheet = remember { SheetState(scope) }

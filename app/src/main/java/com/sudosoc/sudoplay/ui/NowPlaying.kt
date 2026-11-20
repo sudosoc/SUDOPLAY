@@ -120,7 +120,7 @@ class PlayerActions(
     val onClose: () -> Unit = {}, val onFav: () -> Unit = {}, val onAdd: () -> Unit = {},
     val onLyrics: () -> Unit = {}, val onQueue: () -> Unit = {},
     val onShuffle: () -> Unit = {}, val onPrev: () -> Unit = {}, val onPlay: () -> Unit = {}, val onNext: () -> Unit = {}, val onRepeat: () -> Unit = {},
-    val onSeek: (Float) -> Unit = {}, val onSeekDone: () -> Unit = {},
+    val onSeek: (Float) -> Unit = {}, val onSeekDone: () -> Unit = {}, val onMore: () -> Unit = {},
 )
 
 // ============================================================================ entry
@@ -219,6 +219,8 @@ internal fun PlayerContent(vm: PlayerViewModel, pt: PlayerTheme, sheet: SheetSta
         onSheetSettle = { v -> sheet.settle(v); if (v > 1400f || sheet.frac < 0.78f) vm.haptics.tick() },
     )
 
+    var moreOpen by remember { mutableStateOf(false) }
+    if (moreOpen) song?.let { cur -> SongSheet(vm, cur, onSelect = {}, onDismiss = { moreOpen = false }, forPlayer = true) }
     val btn = playerButtons(s)
     val dur = vm.duration.coerceAtLeast(1L)
     val shown = (scrubTarget ?: drag?.toLong() ?: vm.position).coerceIn(0L, dur)
@@ -228,6 +230,7 @@ internal fun PlayerContent(vm: PlayerViewModel, pt: PlayerTheme, sheet: SheetSta
     )
     val actions = PlayerActions(
         onClose = { sheet.close() },
+        onMore = { if (song != null) moreOpen = true },
         onFav = { song?.let { vm.store.toggleFav(it.id); vm.haptics.click() } },
         onAdd = { vm.playlistTarget = song },
         onLyrics = { mode = if (mode == 1) 0 else 1 },
@@ -312,7 +315,8 @@ fun PlayerLayout(
     Column(modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 8.dp)) {
         // ---- top bar
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = act.onClose) { Icon(I.KeyboardArrowDown, null, tint = t.text, modifier = Modifier.size(32.dp)) }
+            IconButton(onClick = act.onClose) { Icon(I.KeyboardArrowDown, "Close player", tint = t.text, modifier = Modifier.size(32.dp)) }
+            Spacer(Modifier.size(48.dp)); Spacer(Modifier.size(48.dp))
             Text(
                 when (mode) { 1 -> "Lyrics"; 2 -> "Queue"; else -> "Now playing" }, color = t.text.copy(alpha = 0.8f),
                 modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
@@ -323,6 +327,7 @@ fun PlayerLayout(
                 else IconButton(onClick = act.onQueue) { Icon(I.QueueMusic, null, tint = if (mode == 2) t.primary else t.text) }
             }
             repeat(2 - topShown.size) { Spacer(Modifier.size(48.dp)) }
+            IconButton(onClick = act.onMore) { Icon(I.MoreVert, "More options", tint = t.text) }
         }
         if (topChip != null) Box(Modifier.padding(bottom = 4.dp)) { topChip() }
 

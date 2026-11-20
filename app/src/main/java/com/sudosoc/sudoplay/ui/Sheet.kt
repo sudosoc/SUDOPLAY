@@ -46,6 +46,7 @@ fun SudoSheet(
             Box(Modifier.padding(top = 10.dp, bottom = 6.dp).width(38.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(t.text.copy(alpha = 0.25f)))
         },
     ) {
+      CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides if (Tr.ar) androidx.compose.ui.unit.LayoutDirection.Rtl else androidx.compose.ui.unit.LayoutDirection.Ltr) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 12.dp)) {
             if (title != null || header != null) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -60,6 +61,7 @@ fun SudoSheet(
             }
             content(close)
         }
+      }
     }
 }
 

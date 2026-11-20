@@ -1,6 +1,9 @@
 package com.sudosoc.sudoplay.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -19,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** A public playlist from Discover, opened like any list. Nothing is added to the library until the user taps "Add to my playlists". */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PlaylistPreviewScreen(vm: PlayerViewModel, p: PlayerViewModel.PlaylistPreview) {
     val t = LocalSudo.current
@@ -48,10 +52,18 @@ fun PlaylistPreviewScreen(vm: PlayerViewModel, p: PlayerViewModel.PlaylistPrevie
                         val thumb by produceState<android.graphics.Bitmap?>(null, tr.thumb) {
                             value = tr.thumb?.let { u -> withContext(Dispatchers.IO) { ArtLoader.load(ctx, android.net.Uri.parse(u), 128) } }
                         }
+                        val rowId = remember(tr) { vm.previewId(tr) }
+                        val picked = vm.sel.has(rowId)
+                        val selecting = vm.sel.active
+                        fun tick() { val all = vm.previewSongs(p); all.firstOrNull { it.id == rowId }?.let { vm.haptics.click(); vm.sel.toggle(it, all) } }
                         Row(
-                            Modifier.fillMaxWidth().clickable { vm.playList(vm.previewSongs(p), i) }.padding(horizontal = 16.dp, vertical = 7.dp),
+                            Modifier.fillMaxWidth()
+                                .background(if (picked) t.primary.copy(alpha = 0.14f) else androidx.compose.ui.graphics.Color.Transparent)
+                                .combinedClickable(onClick = { if (selecting) tick() else vm.playList(vm.previewSongs(p), i) }, onLongClick = { tick() })
+                                .padding(horizontal = 16.dp, vertical = 7.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            if (selecting) { SelectDot(picked); Spacer(Modifier.width(12.dp)) }
                             ArtImage(thumb, Modifier.size(48.dp), 10.dp)
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
@@ -61,7 +73,7 @@ fun PlaylistPreviewScreen(vm: PlayerViewModel, p: PlayerViewModel.PlaylistPrevie
                                     color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                            IconButton({ menu = true }) { Icon(I.MoreVert, "More options", tint = t.text.copy(alpha = 0.7f)) }
+                            if (!selecting) IconButton({ menu = true }) { Icon(I.MoreVert, "More options", tint = t.text.copy(alpha = 0.7f)) }
                             if (menu) SudoSheet(
                                 { menu = false }, title = tr.title, subtitle = artistLabel(tr.artist),
                                 header = { ArtImage(thumb, Modifier.size(52.dp), 12.dp) },

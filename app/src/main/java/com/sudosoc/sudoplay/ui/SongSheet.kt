@@ -17,21 +17,23 @@ fun toastText(ctx: Context, msg: String, long: Boolean = false) =
 
 /** Everything you can do with one song, as a bottom sheet. [extra] adds screen-specific rows (e.g. remove from this playlist). */
 @Composable
-fun SongSheet(vm: PlayerViewModel, song: Song, onSelect: () -> Unit, onDismiss: () -> Unit, extra: (@Composable ColumnScope.(close: () -> Unit) -> Unit)? = null) {
+fun SongSheet(vm: PlayerViewModel, song: Song, onSelect: () -> Unit, onDismiss: () -> Unit, forPlayer: Boolean = false, extra: (@Composable ColumnScope.(close: () -> Unit) -> Unit)? = null) {
     val ctx = LocalContext.current
     val fav = vm.store.isFav(song.id)
     SudoSheet(
         onDismiss, title = song.title, subtitle = artistLabel(song.artist),
         header = { Artwork(song, Modifier.size(52.dp), 128, 12.dp) },
     ) { close ->
-        SheetAction(I.SkipNext, "Play next") { vm.playNext(song); toastText(ctx, "Plays next"); close() }
-        SheetAction(I.QueueMusic, "Add to queue") { vm.addToQueue(song); toastText(ctx, "Added to queue"); close() }
+        if (!forPlayer) {
+            SheetAction(I.SkipNext, "Play next") { vm.playNext(song); toastText(ctx, "Plays next"); close() }
+            SheetAction(I.QueueMusic, "Add to queue") { vm.addToQueue(song); toastText(ctx, "Added to queue"); close() }
+        }
         SheetAction(if (fav) I.Favorite else I.FavoriteBorder, if (fav) "Remove from favorites" else "Add to favorites", selected = fav) {
             vm.store.toggleFav(song.id); toastText(ctx, if (fav) "Removed from favorites" else "Added to favorites"); close()
         }
         SheetAction(I.PlaylistAdd, "Add to playlist…") { close(); vm.playlistTarget = song }
         if (song.online) SheetAction(I.Download, "Download") { vm.downloadSongs(listOf(song)); close() }
-        SheetAction(I.SelectAll, "Select") { close(); onSelect() }
+        if (!forPlayer) SheetAction(I.SelectAll, "Select") { close(); onSelect() }
         if (!song.online) {
             SheetAction(I.Share, "Share") { shareSong(ctx, song); close() }
             SheetAction(I.Info, "Song info") { close(); vm.infoSong = song }
@@ -67,5 +69,24 @@ fun PlaylistPickerSheet(vm: PlayerViewModel, songs: List<Song>, onDone: () -> Un
             val has = songs.size == 1 && songs[0].id in p.songIds
             SheetAction(if (p.id == com.sudosoc.sudoplay.data.FAV_ID) I.Favorite else I.QueueMusic, "${p.name}  •  ${p.songIds.size}", selected = has) { addTo(p.id); close() }
         }
+    }
+}
+
+/** Menu for a whole album / artist / folder / queue: play it, queue it, put all of it in a playlist. */
+@Composable
+fun GroupSheet(vm: PlayerViewModel, title: String, subtitle: String, songs: List<Song>, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    var picker by remember { mutableStateOf(false) }
+    if (picker) { PlaylistPickerSheet(vm, songs) { picker = false; onDismiss() }; return }
+    SudoSheet(
+        onDismiss, title = title, subtitle = subtitle,
+        header = { Artwork(songs.firstOrNull(), Modifier.size(52.dp), 128, 12.dp) },
+    ) { close ->
+        SheetAction(I.PlayArrow, "Play", enabled = songs.isNotEmpty()) { close(); vm.playList(songs, 0) }
+        SheetAction(I.Shuffle, "Shuffle", enabled = songs.isNotEmpty()) { close(); vm.playList(songs, 0, true) }
+        SheetAction(I.SkipNext, "Play next", enabled = songs.isNotEmpty()) { vm.playNextAll(songs); toastText(ctx, "Plays next"); close() }
+        SheetAction(I.QueueMusic, "Add to queue", enabled = songs.isNotEmpty()) { vm.addToQueueAll(songs); toastText(ctx, "Added to queue"); close() }
+        SheetAction(I.PlaylistAdd, "Add to playlist…", enabled = songs.isNotEmpty()) { picker = true }
+        if (songs.any { it.online }) SheetAction(I.Download, "Download") { vm.downloadSongs(songs); close() }
     }
 }

@@ -291,14 +291,19 @@ private fun OnlineRow(item: OnlineItem, vm: PlayerViewModel, onOpen: (OnlineItem
     val folder = item.collection != null
     // already saved on this phone? (re-read whenever the download list changes)
     val saved = !folder && item.url.isNotEmpty() && remember(vm.olib.version, vm.rawSongs) { vm.olib.localFor(com.sudosoc.sudoplay.online.Online.idFor(item.url)) != null }
+    val selecting = vm.sel.active
+    val picked = !folder && item.url.isNotEmpty() && vm.sel.has(com.sudosoc.sudoplay.online.Online.idFor(item.url))
+    fun tick() { vm.songForOnline(item)?.let { vm.haptics.click(); vm.sel.toggle(it) } }
     Row(
         Modifier.fillMaxWidth()
+            .background(if (picked) t.primary.copy(alpha = 0.14f) else androidx.compose.ui.graphics.Color.Transparent)
             .combinedClickable(
-                onClick = { if (folder) onOpen(item) else (onPlay ?: { vm.playOnline(it, 0) })(item) },
-                onLongClick = { if (!folder) { vm.haptics.click(); menu = true } },
+                onClick = { if (folder) onOpen(item) else if (selecting) tick() else (onPlay ?: { vm.playOnline(it, 0) })(item) },
+                onLongClick = { if (!folder) tick() },
             ).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (selecting && !folder) { SelectDot(picked); Spacer(Modifier.width(12.dp)) }
         Box(Modifier.size(52.dp)) {
             ArtImage(thumb, Modifier.fillMaxSize(), 10.dp)
             if (folder) Icon(I.Folder, null, tint = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.9f), modifier = Modifier.align(Alignment.Center).size(22.dp))
@@ -314,7 +319,7 @@ private fun OnlineRow(item: OnlineItem, vm: PlayerViewModel, onOpen: (OnlineItem
         if (saved) { SourceBadge(false); Spacer(Modifier.width(2.dp)) }
         if (loading) CircularProgressIndicator(Modifier.size(22.dp), color = t.primary, strokeWidth = 2.dp)
         else if (folder) Icon(I.KeyboardArrowDown, null, tint = t.text.copy(alpha = 0.5f), modifier = Modifier.size(22.dp).padding(end = 2.dp))
-        else IconButton({ menu = true }) { Icon(I.MoreVert, "More options", tint = t.text.copy(alpha = 0.7f)) }
+        else if (!selecting) IconButton({ menu = true }) { Icon(I.MoreVert, "More options", tint = t.text.copy(alpha = 0.7f)) }
     }
     if (menu) SudoSheet(
         { menu = false }, title = item.title, subtitle = item.subtitle,
@@ -322,6 +327,10 @@ private fun OnlineRow(item: OnlineItem, vm: PlayerViewModel, onOpen: (OnlineItem
     ) { close ->
         SheetAction(I.SkipNext, "Play next") { vm.playOnline(item, 1); toastText(ctx, "Plays next"); close() }
         SheetAction(I.QueueMusic, "Add to queue") { vm.playOnline(item, 2); toastText(ctx, "Added to queue"); close() }
+        vm.songForOnline(item)?.let { song ->
+            SheetAction(I.PlaylistAdd, "Add to playlist…") { close(); vm.playlistTarget = song }
+            SheetAction(I.SelectAll, "Select") { close(); vm.sel.toggle(song) }
+        }
         if (item.kind != OnlineKind.Radio) {
             SheetAction(I.Download, "Download") { DownloadCenter.downloadNow(listOf(item)); close() }
             SheetAction(I.Tune, "Download… (choose quality)") { close(); onDownload(item) }

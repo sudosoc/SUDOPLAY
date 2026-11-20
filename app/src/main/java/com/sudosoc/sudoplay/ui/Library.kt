@@ -2,7 +2,9 @@ package com.sudosoc.sudoplay.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -92,7 +94,7 @@ fun SongsTab(vm: PlayerViewModel) {
             Spacer(Modifier.weight(1f))
             Text("${list.size}", color = t.text.copy(alpha = 0.6f))
         }
-        if (vm.loading) Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = t.primary) }
+        if (vm.loading) SkeletonList()
         else if (list.isEmpty()) {
             if (query.isBlank()) EmptyState("Nothing found on this phone yet. Add some music, then rescan.", "Rescan library") { vm.refreshLibrary() }
             else EmptyState("Nothing matches “$query”", "Clear search") { query = "" }
@@ -147,6 +149,7 @@ fun foldForSearch(s: String): String {
 }
 
 // ---------------- Albums ----------------
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AlbumsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
     val t = LocalSudo.current
@@ -156,8 +159,17 @@ fun AlbumsTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
         if (albums.isEmpty()) EmptyState("No albums yet")
         LazyVerticalGrid(GridCells.Fixed(2), contentPadding = PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(albums, key = { it.first }) { (name, songs) ->
-                Column(Modifier.clickable { onOpen(Detail.Album(name)) }) {
-                    Artwork(songs.first(), Modifier.fillMaxWidth().aspectRatio(1f), 384, 20.dp)
+                var menu by remember { mutableStateOf(false) }
+                Column(Modifier.combinedClickable(onClick = { onOpen(Detail.Album(name)) }, onLongClick = { vm.haptics.click(); menu = true })) {
+                    Box {
+                        Artwork(songs.first(), Modifier.fillMaxWidth().aspectRatio(1f), 384, 20.dp)
+                        IconButton({ menu = true }, Modifier.align(Alignment.BottomEnd)) {
+                            Box(Modifier.size(32.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
+                                Icon(I.MoreVert, "More options", tint = Color.White, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                    if (menu) GroupSheet(vm, name, "${songs.first().artist} • ${songs.size}", songs.sortedBy { it.track }) { menu = false }
                     Text(name, color = t.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
                     Text("${songs.first().artist} • ${songs.size}", color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -180,6 +192,7 @@ fun BrowseTab(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FolderList(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
     val t = LocalSudo.current
@@ -187,20 +200,24 @@ private fun FolderList(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
     if (folders.isEmpty()) EmptyState("No folders yet")
     LazyColumn {
         items(folders, key = { it.first }) { (path, songs) ->
-            Row(Modifier.fillMaxWidth().clickable { onOpen(Detail.Folder(path)) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            var menu by remember { mutableStateOf(false) }
+            Row(Modifier.fillMaxWidth().combinedClickable(onClick = { onOpen(Detail.Folder(path)) }, onLongClick = { vm.haptics.click(); menu = true }).padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(50.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(t.primary.copy(alpha = 0.8f), t.secondary.copy(alpha = 0.8f)))), contentAlignment = Alignment.Center) {
                     Icon(I.Folder, null, tint = t.onAccent)
                 }
                 Spacer(Modifier.width(14.dp))
-                Column {
+                Column(Modifier.weight(1f)) {
                     Text(path.substringAfterLast('/').ifEmpty { path }, color = t.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text("${songs.size} songs • $path", color = t.text.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+                IconButton({ menu = true }) { Icon(I.MoreVert, "More options", tint = t.text.copy(alpha = 0.7f)) }
             }
+            if (menu) GroupSheet(vm, path.substringAfterLast('/').ifEmpty { path }, "${songs.size} songs", songs.sortedBy { it.title.lowercase() }) { menu = false }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ArtistList(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
     val t = LocalSudo.current
@@ -209,14 +226,17 @@ private fun ArtistList(vm: PlayerViewModel, onOpen: (Detail) -> Unit) {
         if (artists.isEmpty()) EmptyState("No artists yet")
         LazyColumn {
             items(artists, key = { it.first }) { (name, songs) ->
-                Row(Modifier.fillMaxWidth().clickable { onOpen(Detail.Artist(name)) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                var menu by remember { mutableStateOf(false) }
+                Row(Modifier.fillMaxWidth().combinedClickable(onClick = { onOpen(Detail.Artist(name)) }, onLongClick = { vm.haptics.click(); menu = true }).padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Artwork(songs.first(), Modifier.size(54.dp), 128, 27.dp)
                     Spacer(Modifier.width(14.dp))
-                    Column {
-                        Text(name, color = t.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Column(Modifier.weight(1f)) {
+                        Text(artistLabel(name), color = t.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("${songs.size} songs", color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
                     }
+                    IconButton({ menu = true }) { Icon(I.MoreVert, "More options", tint = t.text.copy(alpha = 0.7f)) }
                 }
+                if (menu) GroupSheet(vm, artistLabel(name), "${songs.size} songs", songs.sortedBy { it.title.lowercase() }) { menu = false }
             }
         }
     }

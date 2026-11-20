@@ -37,6 +37,12 @@ Android music player (Kotlin, Jetpack Compose, Media3) — local library, 10-ban
 - Arabic: ~100 more strings; screen-reader names for icon buttons.
 - Fixed: duplicate "Player" section in Settings.
 
+## v0.17.1
+- Every three-dot button opens the same themed sheet: songs, albums (tile ⋮ + long-press), artists, folders, playlists, online results, Discover previews, queue rows and the player itself (new ⋮ for the playing song).
+- Multi-select also works in online search results and Discover playlist previews.
+- Queue: move up/down, play next, remove, save as playlist, clear.
+- Skeleton loading rows, predictive back gesture, sheets follow the app's RTL setting even inside the player.
+
 ## Roadmap
 - v0.3.x: crossfade, ReplayGain, tag editor, lyrics for FLAC/M4A
 - v0.3: streaming without API keys — NewPipeExtractor (YouTube/SoundCloud), internet radio (radio-browser), direct URLs

@@ -138,23 +138,43 @@ internal fun LyricsView(vm: PlayerViewModel) {
 @Composable
 internal fun QueueList(vm: PlayerViewModel) {
     val t = LocalSudo.current
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (vm.queueIndex - 2).coerceAtLeast(0))
+    var menuFor by remember { mutableStateOf<Int?>(null) }
     LazyColumn(Modifier.fillMaxSize().sudoPanel(RoundedCornerShape(24.dp)), state = state) {
+        item("queue_head") {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("${vm.queue.size} in queue", color = t.text.copy(alpha = 0.7f), modifier = Modifier.weight(1f))
+                TextButton({ toastText(ctx, "Saved as “${vm.saveQueueAsPlaylist()}”") }, enabled = vm.queue.isNotEmpty()) { Text("Save as playlist") }
+                TextButton({ vm.clearQueueKeepCurrent() }, enabled = vm.queue.size > 1) { Text("Clear") }
+            }
+        }
         itemsIndexed(vm.queue) { i, s ->
             val cur = i == vm.queueIndex
             Row(
-                Modifier.fillMaxWidth().clickable { vm.jumpTo(i) }.padding(horizontal = 14.dp, vertical = 6.dp),
+                Modifier.fillMaxWidth().clickable { vm.jumpTo(i) }.padding(start = 14.dp, top = 6.dp, bottom = 6.dp, end = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Artwork(s, Modifier.size(42.dp), 96, 10.dp)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(s.title, color = if (cur) t.primary else t.text, fontWeight = if (cur) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(s.artist, color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(artistLabel(s.artist), color = t.text.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                IconButton(onClick = { vm.removeFromQueue(i) }) { Icon(I.Close, null, tint = t.text.copy(alpha = 0.6f)) }
+                IconButton(onClick = { menuFor = i }) { Icon(I.MoreVert, "More options", tint = t.text.copy(alpha = 0.7f)) }
             }
         }
     }
+    menuFor?.let { i ->
+        val s = vm.queue.getOrNull(i)
+        if (s == null) menuFor = null
+        else SudoSheet({ menuFor = null }, title = s.title, subtitle = artistLabel(s.artist), header = { Artwork(s, Modifier.size(52.dp), 128, 12.dp) }) { close ->
+            SheetAction(I.PlayArrow, "Play now") { vm.jumpTo(i); close() }
+            SheetAction(I.SkipNext, "Play next", enabled = i != vm.queueIndex) { vm.queueItemNext(i); close() }
+            SheetAction(I.KeyboardArrowUp, "Move up", enabled = i > 0) { vm.moveInQueue(i, i - 1); close() }
+            SheetAction(I.KeyboardArrowDown, "Move down", enabled = i < vm.queue.lastIndex) { vm.moveInQueue(i, i + 1); close() }
+            SheetAction(I.PlaylistAdd, "Add to playlist…") { close(); vm.playlistTarget = s }
+            SheetAction(I.Close, "Remove from queue", danger = true, enabled = vm.queue.size > 1) { vm.removeFromQueue(i); close() }
+        }
+    }
 }
-

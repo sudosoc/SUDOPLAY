@@ -16,6 +16,13 @@ class TrTest {
         assertEquals("تم تحديد 3", Tr.t("3 selected"))
         assertEquals("12 أغنية • 1 h 5 min • بتشتغل من غير نت • 80 MB", Tr.t("12 songs • 1 h 5 min • works offline • 80 MB"))
     }
+    @Test fun newSheetStrings() {
+        Tr.ar = true
+        assertEquals("اتحفظت باسم «Mix»", Tr.t("Saved as “Mix”"))
+        assertEquals("7 في الدور", Tr.t("7 in queue"))
+        assertEquals("اتضاف 3 لـ «Gym»", Tr.t("Added 3 to “Gym”"))
+        assertEquals("شغّل دلوقتي", Tr.t("Play now"))
+    }
     @Test fun unknownStaysEnglish() { Tr.ar = true; assertEquals("Blinding Lights", Tr.t("Blinding Lights")) }
     @Test fun deviceLanguageAuto() {
         assertTrue(Tr.isArabic("auto", "ar")); assertFalse(Tr.isArabic("auto", "en"))

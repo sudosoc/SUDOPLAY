@@ -526,6 +526,36 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val key = if (t.url.isNotBlank()) t.url else "search:" + (t.artist + "|" + t.title).lowercase().replace(Regex("\\s+"), " ").trim()
         return com.sudosoc.sudoplay.data.OnlineEntry(com.sudosoc.sudoplay.online.Online.idFor(key), t.kind?.name ?: "Link", t.title, t.artist, t.thumb, t.durationSec, t.url)
     }
+    fun previewId(t: com.sudosoc.sudoplay.online.ImpTrack): Long = entryOf(t).id
+
+    /** An online search result as a song that can be ticked, queued, favourited or put in a playlist. Folders / blank links give null. */
+    fun songForOnline(item: com.sudosoc.sudoplay.online.OnlineItem): Song? {
+        if (item.url.isBlank() || item.collection != null) return null
+        val e = com.sudosoc.sudoplay.data.OnlineEntry(com.sudosoc.sudoplay.online.Online.idFor(item.url), item.kind.name, item.title, item.subtitle, item.thumb, item.durationSec, item.url)
+        if (olib.get(e.id) == null) olib.put(e)
+        return entrySong(e.id)
+    }
+
+    // ---- the queue ----
+    fun moveInQueue(from: Int, to: Int) { controller?.let { if (from in 0 until it.mediaItemCount && to in 0 until it.mediaItemCount && from != to) it.moveMediaItem(from, to) } }
+    /** Make queue item [i] the next one to play. */
+    fun queueItemNext(i: Int) {
+        val c = controller ?: return
+        val cur = c.currentMediaItemIndex
+        if (i == cur) return
+        moveInQueue(i, if (i > cur) cur + 1 else cur)
+    }
+    fun clearQueueKeepCurrent() {
+        val c = controller ?: return
+        for (i in c.mediaItemCount - 1 downTo 0) if (i != c.currentMediaItemIndex) c.removeMediaItem(i)
+    }
+    /** Returns the new playlist's name. */
+    fun saveQueueAsPlaylist(): String {
+        val pl = store.create(current?.title?.let { "Queue • $it" } ?: "Queue")
+        queue.forEach { addToPlaylist(pl.id, it) }
+        return pl.name
+    }
+
     /** The previewed songs as playable entries (only now are they remembered by the app; no playlist is created). */
     fun previewSongs(p: PlaylistPreview): List<Song> {
         val es = p.tracks.map(::entryOf); olib.putAll(es)

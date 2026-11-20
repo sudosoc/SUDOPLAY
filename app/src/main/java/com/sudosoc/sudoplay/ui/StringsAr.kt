@@ -461,6 +461,10 @@ internal val AR_WORDS: Map<String, String> = mapOf(
     "When you listen" to "امتى بتسمع",
     "Which sources a search uses is chosen in the Online tab (Sources button). Everything works without accounts or API keys." to "المصادر اللي بيبحث فيها بتتحدد من تبويب أونلاين (زرار المصادر). كل حاجة شغالة من غير حسابات ولا مفاتيح.",
     "Widget theme" to "ثيم الويدجت",
+    "Play now" to "شغّل دلوقتي",
+    "Move up" to "فوق",
+    "Move down" to "تحت",
+    "Remove from queue" to "شيل من الدور",
 )
 
 internal val AR_RULES: List<Pair<Regex, String>> = listOf(
@@ -495,4 +499,6 @@ internal val AR_RULES: List<Pair<Regex, String>> = listOf(
     Regex("^Deleted “(.*)”\$") to "اتمسحت «\$1»",
     Regex("^(\\d+) MB used\$") to "\$1 ميجا مستخدمة",
     Regex("^(\\d+) songs\$") to "\$1 أغنية",
+    Regex("^Saved as “(.*)”\$") to "اتحفظت باسم «\$1»",
+    Regex("^(\\d+) in queue\$") to "\$1 في الدور",
 )
